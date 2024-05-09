@@ -41,8 +41,8 @@ impl std::fmt::Display for TokenType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Int(int) => int.to_string().cyan().fmt(f),
-            Self::Sym(sym) => sym.to_string().green().fmt(f),
-            Self::String(string) => format!("'{string}'").bright_green().fmt(f),
+            Self::Sym(sym) => sym.to_string().red().fmt(f),
+            Self::String(string) => format!(r#"'{string}'"#).bright_green().fmt(f),
             Self::List(list) => {
                 write!(f, "(")?;
 

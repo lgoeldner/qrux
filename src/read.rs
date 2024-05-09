@@ -2,15 +2,27 @@
 
 use std::vec;
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use reedline::Signal;
 use regex::Regex;
+use thiserror::Error;
 
 use crate::{lazy::Lazy, Repl};
 
 use self::stream::TokenStream;
 
 mod stream;
+
+#[derive(Error, Debug)]
+pub enum QxErr {
+    #[error("Interrupted, Stop")]
+    Stop,
+    #[error("Fatal Error: {0}")]
+    Fatal(#[from] Box<QxErr>),
+    #[error(transparent)]
+    Any(#[from] anyhow::Error),
+}
+
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {
@@ -19,6 +31,8 @@ pub enum TokenType {
     Sym(String),
     List(Vec<TokenType>),
 }
+
+type PResult<T> = Result<T, QxErr>;
 
 pub fn tokenize(input: &str) -> TokenStream {
     static RE: Lazy<Regex> = Lazy::new(|| {
@@ -32,15 +46,15 @@ pub fn tokenize(input: &str) -> TokenStream {
         .collect()
 }
 
-fn get_inp(ctx: &mut Repl) -> anyhow::Result<String> {
-    Ok(match ctx.reedline.read_line(&ctx.prompt) {
-        Ok(Signal::Success(line)) => line,
-        Ok(Signal::CtrlD | Signal::CtrlC) => bail!("abort"),
-        _ => bail!("read error"),
-    })
+fn get_inp(ctx: &mut Repl) -> PResult<String> {
+    match ctx.reedline.read_line(&ctx.prompt) {
+        Ok(Signal::Success(line)) => Ok(line),
+        Ok(Signal::CtrlD | Signal::CtrlC) => Err(QxErr::Stop)?,
+        any => Err(anyhow!("REPL Err: {any:?}"))?,
+    }
 }
 
-pub fn read() -> anyhow::Result<AST> {
+pub fn read() -> PResult<AST> {
     let inp = get_inp(&mut Repl::new())?;
     let tokens = tokenize(&inp);
     let ast = parse(tokens)?;
