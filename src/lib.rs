@@ -6,12 +6,13 @@ use colored::Colorize;
 use reedline::{DefaultPrompt, FileBackedHistory, Reedline};
 
 use read::{Expr, QxErr};
+use env::{Env, EnvObj};
 
 type FuncT = Rc<dyn Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>>;
 
 pub struct Runtime {
     repl: Repl,
-    env: HashMap<String, Expr>,
+    env: Rc<Env>,
 }
 
 pub struct Func(FuncT);
@@ -33,53 +34,10 @@ impl Runtime {
     pub fn new(repl: Repl) -> Self {
         Self {
             repl,
-            env: Self::default_env_map(),
+            env: Env::with_builtins(),
         }
     }
-
-    fn default_env_map() -> HashMap<String, Expr> {
-        macro_rules! int_op_apply2 {
-            ($($op:tt)+) => {
-                [
-                    $((
-                        // name
-                        stringify!($op).to_owned(),
-                        
-                        Func(Rc::new(|_ctx, args: &[Expr]| {
-                            
-                            // builtin operators are n-ary
-                            let Expr::Int(init) = args[0] else {
-                                return Err(QxErr::NoArgs(Some(args.to_vec())));
-                            };
-                            
-                            args
-                            .iter()
-                            .skip(1)
-                            .try_fold(init, |acc, it| {
-                                if let Expr::Int(it) = it {
-                                    Ok(acc $op it)
-                                } else {
-                                    Err(QxErr::NoArgs(Some(args.to_vec())))
-                                }
-                            })
-                            .map(|it| Expr::Int(it))
-                        } )),
-                    ),)+
-                ]
-            };
-        }
-
-        let list: &[(String, Func)] = &int_op_apply2!(+ - * / %);
-
-        let mut map = HashMap::new();
-
-        for (k, v) in list {
-            map.insert(k.to_string(), Expr::Func(v.clone()));
-        }
-
-        map
-    }
-
+    
     pub fn read_from_stdin(&mut self) -> Result<read::AST, read::QxErr> {
         read::read(self)
     }
@@ -120,7 +78,7 @@ pub mod eval;
 pub mod lazy;
 pub mod print;
 pub mod read;
-
+pub mod env;
 
 impl std::fmt::Display for Expr {
     #[inline]

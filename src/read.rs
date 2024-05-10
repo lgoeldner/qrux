@@ -31,6 +31,12 @@ pub enum QxErr {
 
     #[error("Missing argument, received: {0:?}")]
     NoArgs(Option<Vec<Expr>>),
+    
+    #[error("Type error, expected: {expected:?}, found: {found:?}")]
+    TypeErr {
+        expected: Expr,
+        found: Expr,
+    }
 }
 
 #[derive(Debug)]
