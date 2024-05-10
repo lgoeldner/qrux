@@ -2,13 +2,30 @@
 
 use std::{collections::HashMap, path::PathBuf, rc::Rc};
 
-use read::{QxErr, TokenType};
+use colored::Colorize;
 use reedline::{DefaultPrompt, FileBackedHistory, Reedline};
 
-type Func = Rc<dyn Fn(&mut Runtime, &[TokenType]) -> Result<TokenType, read::QxErr>>;
+use read::{Expr, QxErr};
+
+type FuncT = Rc<dyn Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>>;
+
 pub struct Runtime {
     repl: Repl,
-    env: HashMap<String, Func>,
+    env: HashMap<String, Expr>,
+}
+
+pub struct Func(FuncT);
+
+impl Func {
+    pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, read::QxErr> {
+        self.0(ctx, args)
+    }
+}
+
+impl Clone for Func {
+    fn clone(&self) -> Self {
+        Self(Rc::clone(&self.0))
+    }
 }
 
 impl Runtime {
@@ -20,27 +37,33 @@ impl Runtime {
         }
     }
 
-    fn default_env_map() -> HashMap<String, Func> {
-        // let add: Func = Box::new(|ctx, args: &[TokenType]| {
-        //     if let [TokenType::Int(lhs), TokenType::Int(rhs), ..] = args {
-        //         Ok(TokenType::Int(lhs + rhs))
-        //     } else {
-        //         Err(QxErr::NoArgs(Some(args.to_vec())))
-        //     }
-        // });
-
+    fn default_env_map() -> HashMap<String, Expr> {
         macro_rules! int_op_apply2 {
             ($($op:tt)+) => {
                 [
                     $((
-                        stringify!($op).to_string(),
-                        Rc::new((|_ctx, args: &[TokenType]| {
-                            if let [TokenType::Int(lhs), TokenType::Int(rhs), ..] = args {
-                                Ok(TokenType::Int(lhs $op rhs))
-                            } else {
-                                Err(QxErr::NoArgs(Some(args.to_vec())))
-                            }
-                        }) ),
+                        // name
+                        stringify!($op).to_owned(),
+                        
+                        Func(Rc::new(|_ctx, args: &[Expr]| {
+                            
+                            // builtin operators are n-ary
+                            let Expr::Int(init) = args[0] else {
+                                return Err(QxErr::NoArgs(Some(args.to_vec())));
+                            };
+                            
+                            args
+                            .iter()
+                            .skip(1)
+                            .try_fold(init, |acc, it| {
+                                if let Expr::Int(it) = it {
+                                    Ok(acc $op it)
+                                } else {
+                                    Err(QxErr::NoArgs(Some(args.to_vec())))
+                                }
+                            })
+                            .map(|it| Expr::Int(it))
+                        } )),
                     ),)+
                 ]
             };
@@ -51,7 +74,7 @@ impl Runtime {
         let mut map = HashMap::new();
 
         for (k, v) in list {
-            map.insert(k.to_string(), v.clone());
+            map.insert(k.to_string(), Expr::Func(v.clone()));
         }
 
         map
@@ -98,13 +121,13 @@ pub mod lazy;
 pub mod print;
 pub mod read;
 
-use colored::Colorize;
-impl std::fmt::Display for TokenType {
+
+impl std::fmt::Display for Expr {
     #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         fn write_list(
             f: &mut std::fmt::Formatter,
-            list: &[TokenType],
+            list: &[Expr],
         ) -> Result<(), std::fmt::Error> {
             write!(f, "(")?;
 
@@ -123,6 +146,7 @@ impl std::fmt::Display for TokenType {
             Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
             Self::List(list) => write_list(f, list),
             Self::Nil => "nil".bold().blue().fmt(f),
+            Self::Func(_) => "<Func>".red().fmt(f),
         }
     }
 }

@@ -3,11 +3,12 @@
 use std::vec;
 
 use anyhow::{anyhow, bail, Context};
+use colored::Colorize;
 use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{lazy::Lazy, Repl, Runtime};
+use crate::{Func, lazy::Lazy, Repl, Runtime};
 
 use self::stream::TokenStream;
 
@@ -29,7 +30,7 @@ pub enum QxErr {
     MissingToken(anyhow::Error),
 
     #[error("Missing argument, received: {0:?}")]
-    NoArgs(Option<Vec<TokenType>>),
+    NoArgs(Option<Vec<Expr>>),
 }
 
 #[derive(Debug)]
@@ -47,13 +48,20 @@ impl std::fmt::Display for ParenType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TokenType {
+#[derive(Clone,)]
+pub enum Expr {
+    Func(Func),
     Int(i64),
     String(String),
     Sym(String),
-    List(Vec<TokenType>),
+    List(Vec<Expr>),
     Nil,
+}
+
+impl std::fmt::Debug for Expr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 type PResult<T> = Result<T, QxErr>;
@@ -82,7 +90,7 @@ pub(crate) fn read(runtime: &mut Runtime) -> PResult<AST> {
     Input::get(runtime.repl())?.tokenize().try_into()
 }
 
-impl TryFrom<TokenStream<'_>> for Vec<TokenType> {
+impl TryFrom<TokenStream<'_>> for Vec<Expr> {
     type Error = QxErr;
     fn try_from(value: TokenStream<'_>) -> Result<Self, Self::Error> {
         parse(value)
@@ -100,7 +108,7 @@ impl Input {
     }
 }
 
-pub type AST = Vec<TokenType>;
+pub type AST = Vec<Expr>;
 
 fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
     let mut ast = vec![];
@@ -116,7 +124,7 @@ fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
     Ok(ast)
 }
 
-fn parse_atom(stream: &mut TokenStream) -> Result<TokenType, QxErr> {
+fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     let raw_token = stream.next().context("Missing token")?;
 
     Ok(match raw_token {
@@ -126,10 +134,10 @@ fn parse_atom(stream: &mut TokenStream) -> Result<TokenType, QxErr> {
         }
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
-        "nil" => TokenType::Nil,
+        "nil" => Expr::Nil,
 
         int if int.parse::<i64>().is_ok() => {
-            TokenType::Int(
+            Expr::Int(
                 // SAFETY: already checked if it can parse into an int
                 unsafe { int.parse::<i64>().unwrap_unchecked() },
             )
@@ -140,13 +148,13 @@ fn parse_atom(stream: &mut TokenStream) -> Result<TokenType, QxErr> {
                 return Err(QxErr::MissingToken(anyhow!("Second String delimiter")));
             }
 
-            TokenType::String(string[1..string.len() - 1].to_owned())
+            Expr::String(string[1..string.len() - 1].to_owned())
         }
-        sym => TokenType::Sym(sym.to_string()),
+        sym => Expr::Sym(sym.to_string()),
     })
 }
 
-fn parse_list(stream: &mut TokenStream) -> Result<TokenType, anyhow::Error> {
+fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     // debug_assert_eq!(stream.next().context("Missing \"(\"")?, "(");
 
     let mut list = Vec::new();
@@ -160,5 +168,5 @@ fn parse_list(stream: &mut TokenStream) -> Result<TokenType, anyhow::Error> {
         list.push(parse_atom(stream)?);
     }
 
-    Ok(TokenType::List(list))
+    Ok(Expr::List(list))
 }

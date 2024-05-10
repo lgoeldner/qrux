@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::read::{TokenType, AST};
+use crate::read::{Expr, AST};
 use colored::Colorize;
 
 pub fn pp_ast(ast: &AST) {

@@ -14,7 +14,7 @@ fn main() {
 
 fn rep(runtime: &mut Runtime) -> Result<(), QxErr> {
     let inp = runtime.read_from_stdin()?;
-    let result = runtime.eval(inp)?;
+    let result = runtime.eval_mult(inp)?;
 
     pp_ast(&result);
 
