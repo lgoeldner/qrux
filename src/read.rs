@@ -7,7 +7,7 @@ use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{lazy::Lazy, Repl};
+use crate::{lazy::Lazy, Repl, Runtime};
 
 use self::stream::TokenStream;
 
@@ -21,8 +21,31 @@ pub enum QxErr {
     Fatal(#[from] Box<QxErr>),
     #[error(transparent)]
     Any(#[from] anyhow::Error),
+
+    #[error("Mismatched Paren {0}")]
+    MismatchedParen(ParenType),
+
+    #[error("Missing Token: {0}")]
+    MissingToken(anyhow::Error),
+
+    #[error("Missing argument, received: {0:?}")]
+    NoArgs(Option<Vec<TokenType>>),
 }
 
+#[derive(Debug)]
+pub enum ParenType {
+    Open,
+    Close,
+}
+
+impl std::fmt::Display for ParenType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Open => write!(f, "("),
+            Self::Close => write!(f, ")"),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TokenType {
@@ -30,6 +53,7 @@ pub enum TokenType {
     String(String),
     Sym(String),
     List(Vec<TokenType>),
+    Nil,
 }
 
 type PResult<T> = Result<T, QxErr>;
@@ -54,21 +78,35 @@ fn get_inp(ctx: &mut Repl) -> PResult<String> {
     }
 }
 
-pub fn read() -> PResult<AST> {
-    let inp = get_inp(&mut Repl::new())?;
-    let tokens = tokenize(&inp);
-    let ast = parse(tokens)?;
+pub(crate) fn read(runtime: &mut Runtime) -> PResult<AST> {
+    Input::get(runtime.repl())?.tokenize().try_into()
+}
 
-    Ok(ast)
+impl TryFrom<TokenStream<'_>> for Vec<TokenType> {
+    type Error = QxErr;
+    fn try_from(value: TokenStream<'_>) -> Result<Self, Self::Error> {
+        parse(value)
+    }
+}
+
+struct Input(String);
+impl Input {
+    pub fn get(ctx: &mut Repl) -> PResult<Self> {
+        Ok(Self(get_inp(ctx)?))
+    }
+
+    pub fn tokenize(&self) -> TokenStream {
+        tokenize(&self.0)
+    }
 }
 
 pub type AST = Vec<TokenType>;
 
-fn parse(mut tokens: TokenStream) -> Result<AST, anyhow::Error> {
+fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
     let mut ast = vec![];
 
     while let Some(token) = tokens.peek() {
-        let token = tokens.peek().context("Missing token")?;
+        // let token = tokens.peek().context("Missing token")?;
 
         let t = parse_atom(&mut tokens)?;
 
@@ -78,16 +116,30 @@ fn parse(mut tokens: TokenStream) -> Result<AST, anyhow::Error> {
     Ok(ast)
 }
 
-fn parse_atom(stream: &mut TokenStream) -> Result<TokenType, anyhow::Error> {
-    let token = stream.next().context("Missing token")?;
+fn parse_atom(stream: &mut TokenStream) -> Result<TokenType, QxErr> {
+    let raw_token = stream.next().context("Missing token")?;
 
-    Ok(match token {
+    Ok(match raw_token {
         "(" => {
-            stream.back();
+            // stream.back();
             parse_list(stream)?
         }
-        int if int.parse::<i64>().is_ok() => TokenType::Int(int.parse()?),
-        string if string.starts_with('\"') && string.ends_with('\"') => {
+        ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
+
+        "nil" => TokenType::Nil,
+
+        int if int.parse::<i64>().is_ok() => {
+            TokenType::Int(
+                // SAFETY: already checked if it can parse into an int
+                unsafe { int.parse::<i64>().unwrap_unchecked() },
+            )
+        }
+
+        string if (string.starts_with('"') && string.ends_with('"')) => {
+            if string.len() == 1 {
+                return Err(QxErr::MissingToken(anyhow!("Second String delimiter")));
+            }
+
             TokenType::String(string[1..string.len() - 1].to_owned())
         }
         sym => TokenType::Sym(sym.to_string()),
@@ -95,7 +147,7 @@ fn parse_atom(stream: &mut TokenStream) -> Result<TokenType, anyhow::Error> {
 }
 
 fn parse_list(stream: &mut TokenStream) -> Result<TokenType, anyhow::Error> {
-    debug_assert_eq!(stream.next().context("Missing \"(\"")?, "(");
+    // debug_assert_eq!(stream.next().context("Missing \"(\"")?, "(");
 
     let mut list = Vec::new();
 

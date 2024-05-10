@@ -40,6 +40,10 @@ impl TokenStream<'_> {
     pub const fn pos(&self) -> usize {
         self.pos
     }
+
+    pub fn skip(&mut self, n: usize) {
+        self.pos += n;
+    }
 }
 
 impl<'a> FromIterator<&'a str> for TokenStream<'a> {
