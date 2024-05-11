@@ -87,13 +87,20 @@ impl Closure {
 
     pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, QxErr> {
         // define new env
-        let old_env = Rc::clone(&ctx.env);
+        // let old_env = Rc::clone(&ctx.env);
 
-        ctx.env = Env::with_outer_args(Rc::clone(&self.captured), args, &self.args_name);
-        let res = ctx.eval(*self.body.clone(), None)?;
+        // ctx.env = ;
+        let res = ctx.eval(
+            *self.body.clone(),
+            Some(&dbg!(Env::with_outer_args(
+                Rc::clone(&self.captured),
+                args,
+                &self.args_name,
+            ))),
+        )?;
 
         // restore
-        ctx.env = old_env;
+        // ctx.env = old_env;
         Ok(res)
     }
 }

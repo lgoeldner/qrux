@@ -33,21 +33,20 @@ impl Runtime {
     }
 
     pub fn eval(&mut self, ast: Expr, env: Option<&Rc<Env>>) -> Result<Expr, QxErr> {
-        if let Expr::List(lst) = &ast {
-            if lst.is_empty() {
-                Ok(ast)
-            } else {
+        match ast {
+            Expr::List(ref lst) if lst.is_empty() => Ok(ast),
+            Expr::List(ref lst) => {
                 let ident = if let Expr::Sym(s) = &lst[0] {
                     s.as_str()
                 } else {
-                    return self.apply_func(ast);
+                    return self.apply_func(ast, env);
                 };
 
                 self.specials(ident, lst)?
-                    .map_or_else(|| self.apply_func(ast), Ok)
+                    .map_or_else(|| self.apply_func(ast, env), Ok)
             }
-        } else {
-            self.replace_eval(ast, env)
+
+            _ => self.replace_eval(ast, env),
         }
     }
 
@@ -130,8 +129,8 @@ impl Runtime {
         }
     }
 
-    fn apply_func(&mut self, ast: Expr) -> Result<Expr, QxErr> {
-        let Expr::List(new) = &self.replace_eval(ast, None)? else {
+    fn apply_func(&mut self, ast: Expr, env: Option<&Rc<Env>>) -> Result<Expr, QxErr> {
+        let Expr::List(new) = &self.replace_eval(ast, env)? else {
             unreachable!()
         };
 
