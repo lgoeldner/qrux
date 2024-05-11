@@ -4,7 +4,7 @@
 use std::{path::PathBuf, rc::Rc};
 
 use colored::Colorize;
-use reedline::{DefaultPrompt, FileBackedHistory, Reedline};
+use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::Env;
 use read::{Expr, QxErr};
@@ -19,10 +19,16 @@ pub struct Runtime {
 pub struct Func(FuncT);
 
 impl Eq for Func {}
+// No Closure/Func has the same type
 impl PartialEq for Func {
     fn eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
+}
+
+pub struct Term {
+    prompt: DefaultPrompt,
+    reedline: Reedline,
 }
 
 impl Func {
@@ -53,18 +59,13 @@ impl Runtime {
     }
 
     pub fn read_from_stdin(&mut self) -> Result<read::AST, read::QxErr> {
-        read::read(self)
+        read::read_stdin(self)
     }
 
     #[inline]
-    pub(crate) fn repl(&mut self) -> &mut Term {
+    pub(crate) fn term(&mut self) -> &mut Term {
         &mut self.repl
     }
-}
-
-pub struct Term {
-    prompt: DefaultPrompt,
-    reedline: Reedline,
 }
 
 impl Default for Term {
@@ -77,12 +78,14 @@ impl Term {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new() -> Self {
-        let history = Box::new(
-            FileBackedHistory::with_file(50, PathBuf::from("~/.qrux/history.txt")).unwrap(),
-        );
+        let history =
+            Box::new(FileBackedHistory::with_file(50, PathBuf::from(".qrux/history.txt")).unwrap());
 
         Self {
-            prompt: DefaultPrompt::default(),
+            prompt: DefaultPrompt {
+                left_prompt: DefaultPromptSegment::Basic("User".to_owned()),
+                ..Default::default()
+            },
             reedline: Reedline::create().with_history(history),
         }
     }

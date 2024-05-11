@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::read::Expr;
 use crate::{Func, QxErr};
 
-use self::core::{builtins, int_ops};
+use self::core::{builtins, cmp_ops, int_ops};
 
 mod core;
 
@@ -16,12 +16,12 @@ pub struct Env {
 }
 
 fn core_map(inp: &str) -> Option<Expr> {
-    let res = int_ops(inp).or_else(|| builtins(inp));
-
-    res
+    int_ops(inp)
+        .or_else(|| cmp_ops(inp))
+        .or_else(|| builtins(inp))
 }
 
-fn default_env_map() -> HashMap<String, Expr> {
+fn _default_env_map() -> HashMap<String, Expr> {
     macro_rules! int_op_apply2 {
             ($($op:tt)+) => {
                 [
@@ -94,7 +94,7 @@ impl Env {
     }
 
     pub fn outer(&self) -> Option<Rc<Self>> {
-        self.outer.as_ref().map(|it| Rc::clone(&it))
+        self.outer.as_ref().map(Rc::clone)
     }
 }
 

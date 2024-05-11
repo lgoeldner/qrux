@@ -26,13 +26,13 @@ macro_rules! ok {
 
 impl Runtime {
     // doesnt exist in mal
-    pub fn eval_mult(&mut self, ast: AST) -> Result<AST, QxErr> {
+    pub fn eval_mult(&mut self, ast: AST, env: Option<&Rc<Env>>) -> Result<AST, QxErr> {
         ast.into_iter()
-            .map(|it| self.eval(it))
+            .map(|it| self.eval(it, env))
             .collect::<Result<_, _>>()
     }
 
-    pub fn eval(&mut self, ast: Expr) -> Result<Expr, QxErr> {
+    pub fn eval(&mut self, ast: Expr, env: Option<&Rc<Env>>) -> Result<Expr, QxErr> {
         if let Expr::List(lst) = &ast {
             if lst.is_empty() {
                 Ok(ast)
@@ -47,14 +47,14 @@ impl Runtime {
                     .map_or_else(|| self.apply_func(ast), Ok)
             }
         } else {
-            self.replace_eval(ast)
+            self.replace_eval(ast, env)
         }
     }
 
     fn specials(&mut self, ident: &str, lst: &[Expr]) -> Result<Option<Expr>, QxErr> {
         match (ident, &lst[1..]) {
             ("def!", [Expr::Sym(ident), expr]) => self.defenv(ident, expr).map(Some),
-            ("def!", _) => any_err!(form: "(def! <ident> <expr>)"),
+            ("def!", _) => any_err!(form: "(def! <sym> <expr>)"),
 
             ("fn*", [Expr::List(args), body]) => {
                 let x = args.iter().map(|it| {
@@ -76,14 +76,14 @@ impl Runtime {
             ("fn*", _) => any_err!(form: "(fn* (<args>*) <body>)"),
 
             ("if", [cond, then, ..]) => {
-                let cond = self.eval(cond.clone())?;
+                let cond = self.eval(cond.clone(), None)?;
 
                 match cond {
                     Expr::Bool(false) | Expr::Nil => self
-                        .eval(lst.get(3).ok_or(QxErr::NoArgs(None))?.clone())
+                        .eval(lst.get(3).ok_or(QxErr::NoArgs(None))?.clone(), None)
                         .map(Some),
 
-                    _ => self.eval(then.clone()).map(Some),
+                    _ => self.eval(then.clone(), None).map(Some),
                 }
             }
             ("if", _) => any_err!(form: "(if <condition> <then> ?<else>)"),
@@ -96,7 +96,7 @@ impl Runtime {
                 for pair in new_bindings.chunks_exact(2) {
                     let [Expr::Sym(ident), expr] = pair else {
                         return Err(QxErr::TypeErr {
-                            expected: Expr::Sym("symbol".to_string()),
+                            expected: Expr::Sym("<sym>".to_string()),
                             found: pair[0].clone(),
                         });
                     };
@@ -104,12 +104,12 @@ impl Runtime {
                     self.defenv(ident, expr)?;
                 }
 
-                let result = self.eval(to_eval.clone())?;
+                let result = self.eval(to_eval.clone(), None)?;
                 self.env = self.env.outer().expect("The env was just defined");
 
                 ok!(result)
             }
-            ("let*", _) => any_err!(form: "(let* (<ident> <expr>)+ <expr>)"),
+            ("let*", _) => any_err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
             ("prn", [arg]) => {
                 println!("{arg}");
@@ -117,26 +117,35 @@ impl Runtime {
             }
             ("prn", _) => any_err!(form: "(prn <expr>)"),
 
+            ("do", [start @ .., end]) => {
+                for exp in start {
+                    self.eval(exp.clone(), None)?;
+                }
+
+                self.eval(end.clone(), None).map(Some)
+            }
+            ("do", _) => any_err!(form: "(do <expr>*)"),
+
             _ => Ok(None),
         }
     }
 
     fn apply_func(&mut self, ast: Expr) -> Result<Expr, QxErr> {
-        let Expr::List(new) = &self.replace_eval(ast)? else {
+        let Expr::List(new) = &self.replace_eval(ast, None)? else {
             unreachable!()
         };
 
-        return match new.as_slice() {
+        match new.as_slice() {
             [Expr::Func(func), args @ ..] => func.apply(self, args),
             [Expr::Closure(closure), args @ ..] => closure.apply(self, args),
 
             [err, ..] => any_err!("Not a Function: {err:?}"),
             [] => Err(QxErr::NoArgs(None)),
-        };
+        }
     }
 
     fn defenv(&mut self, ident: &str, expr: &Expr) -> Result<Expr, QxErr> {
-        let res = self.eval(expr.clone())?;
+        let res = self.eval(expr.clone(), None)?;
         self.env.set(ident, res);
 
         Ok(Expr::Nil)
@@ -145,13 +154,13 @@ impl Runtime {
     // named eval_ast in mal
     // replaces symbols with their values
     // evaluates lists
-    pub fn replace_eval(&mut self, ast: Expr) -> Result<Expr, QxErr> {
+    pub fn replace_eval(&mut self, ast: Expr, env: Option<&Rc<Env>>) -> Result<Expr, QxErr> {
         Ok(match ast {
-            Expr::Sym(sym) => self
-                .env
+            Expr::Sym(sym) => env
+                .unwrap_or(&self.env)
                 .get(&sym)
                 .context(format!("Unbound identifier [ {sym} ]"))?,
-            Expr::List(lst) => Expr::List(self.eval_mult(lst)?),
+            Expr::List(lst) => Expr::List(self.eval_mult(lst, env)?),
             val => val,
         })
     }

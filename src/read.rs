@@ -13,6 +13,18 @@ use self::stream::TokenStream;
 
 mod stream;
 
+#[derive(Clone, Eq, PartialEq)]
+pub enum Expr {
+    Closure(Closure),
+    Func(Func),
+    Int(i64),
+    String(String),
+    Sym(String),
+    List(Vec<Expr>),
+    Bool(bool),
+    Nil,
+}
+
 #[derive(Error, Debug)]
 pub enum QxErr {
     #[error("Interrupted, Stop")]
@@ -56,6 +68,7 @@ pub struct Closure {
     body: Box<Expr>,
     captured: Rc<Env>,
 }
+
 impl Eq for Closure {}
 impl PartialEq for Closure {
     fn eq(&self, _: &Self) -> bool {
@@ -77,24 +90,12 @@ impl Closure {
         let old_env = Rc::clone(&ctx.env);
 
         ctx.env = Env::with_outer_args(Rc::clone(&self.captured), args, &self.args_name);
-        let res = ctx.eval(*self.body.clone())?;
+        let res = ctx.eval(*self.body.clone(), None)?;
 
         // restore
         ctx.env = old_env;
         Ok(res)
     }
-}
-
-#[derive(Clone, Eq, PartialEq)]
-pub enum Expr {
-    Closure(Closure),
-    Func(Func),
-    Int(i64),
-    String(String),
-    Sym(String),
-    List(Vec<Expr>),
-    Bool(bool),
-    Nil,
 }
 
 impl std::fmt::Debug for Expr {
@@ -114,6 +115,7 @@ pub fn tokenize(input: &str) -> TokenStream {
     RE.find_iter(input)
         .map(|it| it.as_str().trim())
         .filter(|it| !it.is_empty())
+        .filter(|comment| !comment.starts_with(';'))
         .collect()
 }
 
@@ -125,8 +127,8 @@ fn get_inp(ctx: &mut Term) -> PResult<String> {
     }
 }
 
-pub(crate) fn read(runtime: &mut Runtime) -> PResult<AST> {
-    Input::get(runtime.repl())?.tokenize().try_into()
+pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<AST> {
+    Input::get(runtime.term())?.tokenize().try_into()
 }
 
 impl TryFrom<TokenStream<'_>> for Vec<Expr> {
@@ -136,7 +138,7 @@ impl TryFrom<TokenStream<'_>> for Vec<Expr> {
     }
 }
 
-struct Input(String);
+struct Input(pub String);
 impl Input {
     pub fn get(ctx: &mut Term) -> PResult<Self> {
         Ok(Self(get_inp(ctx)?))
@@ -152,7 +154,7 @@ pub type AST = Vec<Expr>;
 fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
     let mut ast = vec![];
 
-    while let Some(token) = tokens.peek() {
+    while tokens.peek().is_some() {
         // let token = tokens.peek().context("Missing token")?;
 
         let t = parse_atom(&mut tokens)?;
