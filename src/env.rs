@@ -2,12 +2,51 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::{Func, QxErr};
 use crate::read::Expr;
+use crate::{Func, QxErr};
 
+#[derive(Debug, Clone, Default)]
 pub struct Env {
     outer: Option<Rc<Self>>,
     data: RefCell<HashMap<String, Expr>>,
+}
+
+fn core_map(inp: &str) -> Option<Expr> {
+    macro_rules! int_op_apply {
+        ($($op:tt),+) => {
+            Some(match inp {
+                $(
+                    stringify!($op) => Expr::Func(Func(Rc::new(|_ctx, args: &[Expr]| {
+                        // builtin operators are variadic
+                        let Expr::Int(init) = args[0] else {
+                            return Err(QxErr::NoArgs(Some(args.to_vec())));
+                        };
+
+                        args.iter()
+                            .skip(1)
+                            .try_fold(init, |acc, it| {
+                                if let Expr::Int(it) = it {
+                                    Ok(acc $op it)
+                                } else {
+                                    Err(QxErr::NoArgs(Some(args.to_vec())))
+                                }
+                            })
+                            .map(Expr::Int)
+                    }))),
+                )+
+                _ => None?,
+            })
+        };
+    }
+
+    let ops_res = int_op_apply!(+, -, *, /, %);
+    // let cmp_res = ops_res.or_else(|| match inp {
+
+
+    //     any =>
+    // });
+        ops_res
+    // cmp_res
 }
 
 fn default_env_map() -> HashMap<String, Expr> {
@@ -17,14 +56,14 @@ fn default_env_map() -> HashMap<String, Expr> {
                     $((
                         // name
                         stringify!($op).to_owned(),
-                        
+
                         Func(Rc::new(|_ctx, args: &[Expr]| {
-                            
-                            // builtin operators are n-ary
+
+                            // builtin operators are variadic
                             let Expr::Int(init) = args[0] else {
                                 return Err(QxErr::NoArgs(Some(args.to_vec())));
                             };
-                            
+
                             args
                             .iter()
                             .skip(1)
@@ -54,24 +93,37 @@ fn default_env_map() -> HashMap<String, Expr> {
 }
 
 impl Env {
-    pub fn with_builtins() -> Rc<Self> {
-        Rc::new(Self {
-            outer: None,
-            data: RefCell::new(default_env_map()),
-        })
+    #[must_use]
+    pub fn new() -> Rc<Self> {
+        Rc::new(Self::default())
     }
-    
+
+    pub fn with_outer_args(
+        outer: Rc<Self>,
+        args: &[Expr],
+        argsident: &[impl AsRef<str>],
+    ) -> Rc<Self> {
+        let env = Self::with_outer(outer);
+
+        for (arg, ident) in args.iter().zip(argsident) {
+            env.data
+                .borrow_mut()
+                .insert(ident.as_ref().to_string(), arg.clone());
+        }
+
+        env
+    }
+
     pub fn with_outer(outer: Rc<Self>) -> Rc<Self> {
         Rc::new(Self {
             outer: Some(outer),
             data: RefCell::new(HashMap::new()),
         })
     }
-    
+
     pub fn outer(&self) -> Option<Rc<Self>> {
-        self.outer.as_ref().map(| it| Rc::clone(&it))
+        self.outer.as_ref().map(|it| Rc::clone(&it))
     }
-    
 }
 
 mod private {
@@ -91,7 +143,10 @@ pub trait EnvObj: private::Sealed {
 
 impl EnvObj for Rc<Env> {
     fn get(&self, ident: &str) -> Option<Expr> {
-        self.find(ident)?.data.borrow().get(ident).cloned()
+        self.find(ident).map_or_else(
+            || core_map(ident),
+            |env| env.data.borrow().get(ident).cloned(),
+        )
     }
 
     fn set(&self, ident: &str, val: Expr) {
@@ -106,6 +161,11 @@ impl EnvObj for Rc<Env> {
             // then return self
             .then(|| Rc::clone(self))
             // or delegate to the outer env
-            .or_else(|| self.outer.as_ref().and_then(|it| it.find(ident)))
+            .or_else(|| {
+                self.outer
+                    .as_ref()
+                    // .or_else(|| )
+                    .and_then(|it| it.find(ident))
+            })
     }
 }

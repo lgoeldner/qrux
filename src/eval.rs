@@ -1,12 +1,13 @@
 use std::rc::Rc;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 
+use crate::env::{Env, EnvObj};
+use crate::read::Closure;
 use crate::{
-    read::{AST, Expr, QxErr},
+    read::{Expr, QxErr, AST},
     Runtime,
 };
-use crate::env::{Env, EnvObj};
 
 impl Runtime {
     // doesnt exist in mal
@@ -16,14 +17,44 @@ impl Runtime {
             .collect::<Result<_, _>>()
     }
 
-    fn eval(&mut self, ast: Expr) -> Result<Expr, QxErr> {
+    pub fn eval(&mut self, ast: Expr) -> Result<Expr, QxErr> {
         if let Expr::List(lst) = &ast {
-            if lst.len() == 0 {
+            if lst.is_empty() {
                 Ok(ast)
             } else {
                 match lst.as_slice() {
                     [Expr::Sym(s), Expr::Sym(ident), expr] if s == "def!" => {
                         self.defenv(ident, expr)
+                    }
+                    // functions
+                    [Expr::Sym(s), Expr::List(args), body] if s == "fn*" => {
+                        let x = args.iter().map(|it| {
+                            if let Expr::Sym(s) = it {
+                                Ok(s.clone())
+                            } else {
+                                Err(QxErr::Any(anyhow!("Not a symbol: {it:?}")))
+                            }
+                        });
+
+                        let cl = Closure::new(
+                            x.collect::<Result<_, _>>()?,
+                            body.clone(),
+                            Rc::clone(&self.env),
+                        );
+
+                        Ok(Expr::Closure(cl))
+                    }
+
+                    [Expr::Sym(s), cond, then, ..] if s == "if" => {
+                        let cond = self.eval(cond.clone())?;
+
+                        match cond {
+                            Expr::Bool(false) | Expr::Nil => {
+                                self.eval(lst.get(3).ok_or(QxErr::NoArgs(None))?.clone())
+                            }
+
+                            _ => self.eval(then.clone()),
+                        }
                     }
 
                     [Expr::Sym(s), Expr::List(new_bindings), to_eval] if s == "let*" => {
@@ -53,11 +84,12 @@ impl Runtime {
                             unreachable!()
                         };
 
-                        let [Expr::Func(func), args @ ..] = new.as_slice() else {
-                            Err(QxErr::NoArgs(None))?
-                        };
+                        match new.as_slice() {
+                            [Expr::Func(func), args @ ..] => func.apply(self, args),
+                            [Expr::Closure(closure), args @ ..] => closure.apply(self, args),
 
-                        func.apply(self, args)
+                            _ => Err(QxErr::NoArgs(None))?,
+                        }
                     }
                 }
             }
@@ -66,7 +98,7 @@ impl Runtime {
         }
     }
 
-    fn defenv(&mut self, ident: &String, expr: &Expr) -> Result<Expr, QxErr> {
+    fn defenv(&mut self, ident: &str, expr: &Expr) -> Result<Expr, QxErr> {
         let res = self.eval(expr.clone())?;
         self.env.set(ident, res);
 
@@ -81,8 +113,7 @@ impl Runtime {
             Expr::Sym(sym) => self
                 .env
                 .get(&sym)
-                .context(format!("Unbound identifier: {sym}"))?
-                .clone(),
+                .context(format!("Unbound identifier [ {sym} ]"))?,
             Expr::List(lst) => Expr::List(self.eval_mult(lst)?),
             val => val,
         })

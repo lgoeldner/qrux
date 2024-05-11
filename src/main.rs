@@ -1,7 +1,7 @@
-use qrux::{eval, print::pp_ast, read::QxErr, Repl, Runtime};
+use qrux::{eval, print::pp_ast, read::QxErr, Runtime, Term};
 
 fn main() {
-    let mut runtime = Runtime::new(Repl::new());
+    let mut runtime = Runtime::new(Term::new());
 
     loop {
         match rep(&mut runtime) {

@@ -1,6 +1,6 @@
 #![warn(clippy::pedantic, clippy::nursery)]
 
-use std::vec;
+use std::{rc::Rc, vec};
 
 use anyhow::{anyhow, bail, Context};
 use colored::Colorize;
@@ -8,7 +8,7 @@ use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{Func, lazy::Lazy, Repl, Runtime};
+use crate::{env::Env, lazy::Lazy, Func, Runtime, Term};
 
 use self::stream::TokenStream;
 
@@ -29,14 +29,11 @@ pub enum QxErr {
     #[error("Missing Token: {0}")]
     MissingToken(anyhow::Error),
 
-    #[error("Missing argument, received: {0:?}")]
+    #[error("Wrong / Missing argument, received: {0:?}")]
     NoArgs(Option<Vec<Expr>>),
-    
+
     #[error("Type error, expected: {expected:?}, found: {found:?}")]
-    TypeErr {
-        expected: Expr,
-        found: Expr,
-    }
+    TypeErr { expected: Expr, found: Expr },
 }
 
 #[derive(Debug)]
@@ -54,19 +51,51 @@ impl std::fmt::Display for ParenType {
     }
 }
 
-#[derive(Clone,)]
+#[derive(Clone, Debug)]
+pub struct Closure {
+    args_name: Vec<String>,
+    body: Box<Expr>,
+    captured: Rc<Env>
+}
+
+impl Closure {
+    pub fn new(args_name: Vec<String>, body: Expr, captured: Rc<Env>) -> Self {
+        Self {
+            args_name,
+            body: Box::new(body),
+            captured,
+        }
+    }
+
+    pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, QxErr> {
+
+        // define new env
+        let old_env = Rc::clone(&ctx.env);
+
+        ctx.env = Env::with_outer_args(Rc::clone(&self.captured), args, &self.args_name);
+        let res = ctx.eval(*self.body.clone())?;
+
+        // restore
+        ctx.env = old_env;
+        Ok(res)
+    }
+}
+
+#[derive(Clone)]
 pub enum Expr {
+    Closure(Closure),
     Func(Func),
     Int(i64),
     String(String),
     Sym(String),
     List(Vec<Expr>),
+    Bool(bool),
     Nil,
 }
 
 impl std::fmt::Debug for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -84,7 +113,7 @@ pub fn tokenize(input: &str) -> TokenStream {
         .collect()
 }
 
-fn get_inp(ctx: &mut Repl) -> PResult<String> {
+fn get_inp(ctx: &mut Term) -> PResult<String> {
     match ctx.reedline.read_line(&ctx.prompt) {
         Ok(Signal::Success(line)) => Ok(line),
         Ok(Signal::CtrlD | Signal::CtrlC) => Err(QxErr::Stop)?,
@@ -105,7 +134,7 @@ impl TryFrom<TokenStream<'_>> for Vec<Expr> {
 
 struct Input(String);
 impl Input {
-    pub fn get(ctx: &mut Repl) -> PResult<Self> {
+    pub fn get(ctx: &mut Term) -> PResult<Self> {
         Ok(Self(get_inp(ctx)?))
     }
 
@@ -141,6 +170,8 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
         "nil" => Expr::Nil,
+        "true" => Expr::Bool(true),
+        "false" => Expr::Bool(false),
 
         int if int.parse::<i64>().is_ok() => {
             Expr::Int(

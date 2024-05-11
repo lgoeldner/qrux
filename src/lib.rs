@@ -5,13 +5,13 @@ use std::{collections::HashMap, path::PathBuf, rc::Rc};
 use colored::Colorize;
 use reedline::{DefaultPrompt, FileBackedHistory, Reedline};
 
-use read::{Expr, QxErr};
 use env::{Env, EnvObj};
+use read::{Expr, QxErr};
 
 type FuncT = Rc<dyn Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>>;
 
 pub struct Runtime {
-    repl: Repl,
+    repl: Term,
     env: Rc<Env>,
 }
 
@@ -31,35 +31,35 @@ impl Clone for Func {
 
 impl Runtime {
     #[must_use]
-    pub fn new(repl: Repl) -> Self {
+    pub fn new(repl: Term) -> Self {
         Self {
             repl,
-            env: Env::with_builtins(),
+            env: Env::new(),
         }
     }
-    
+
     pub fn read_from_stdin(&mut self) -> Result<read::AST, read::QxErr> {
         read::read(self)
     }
 
     #[inline]
-    pub(crate) fn repl(&mut self) -> &mut Repl {
+    pub(crate) fn repl(&mut self) -> &mut Term {
         &mut self.repl
     }
 }
 
-pub struct Repl {
+pub struct Term {
     prompt: DefaultPrompt,
     reedline: Reedline,
 }
 
-impl Default for Repl {
+impl Default for Term {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Repl {
+impl Term {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new() -> Self {
@@ -74,19 +74,15 @@ impl Repl {
     }
 }
 
+pub mod env;
 pub mod eval;
 pub mod lazy;
 pub mod print;
 pub mod read;
-pub mod env;
 
 impl std::fmt::Display for Expr {
-    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn write_list(
-            f: &mut std::fmt::Formatter,
-            list: &[Expr],
-        ) -> Result<(), std::fmt::Error> {
+        fn write_list(f: &mut std::fmt::Formatter, list: &[Expr]) -> Result<(), std::fmt::Error> {
             write!(f, "(")?;
 
             list.iter()
@@ -104,7 +100,8 @@ impl std::fmt::Display for Expr {
             Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
             Self::List(list) => write_list(f, list),
             Self::Nil => "nil".bold().blue().fmt(f),
-            Self::Func(_) => "<Func>".red().fmt(f),
+            Self::Func(_) | Self::Closure(_) => "<Func>".red().fmt(f),
+            Self::Bool(b) => b.to_string().bright_blue().fmt(f),
         }
     }
 }
