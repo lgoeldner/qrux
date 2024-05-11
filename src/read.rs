@@ -1,9 +1,8 @@
-#![warn(clippy::pedantic, clippy::nursery)]
+// #![warn(clippy::pedantic, clippy::nursery)]
 
 use std::{rc::Rc, vec};
 
-use anyhow::{anyhow, bail, Context};
-use colored::Colorize;
+use anyhow::{anyhow, Context};
 use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
@@ -55,7 +54,13 @@ impl std::fmt::Display for ParenType {
 pub struct Closure {
     args_name: Vec<String>,
     body: Box<Expr>,
-    captured: Rc<Env>
+    captured: Rc<Env>,
+}
+impl Eq for Closure {}
+impl PartialEq for Closure {
+    fn eq(&self, _: &Self) -> bool {
+        false
+    }
 }
 
 impl Closure {
@@ -68,7 +73,6 @@ impl Closure {
     }
 
     pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, QxErr> {
-
         // define new env
         let old_env = Rc::clone(&ctx.env);
 
@@ -81,7 +85,7 @@ impl Closure {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum Expr {
     Closure(Closure),
     Func(Func),
@@ -163,10 +167,7 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     let raw_token = stream.next().context("Missing token")?;
 
     Ok(match raw_token {
-        "(" => {
-            // stream.back();
-            parse_list(stream)?
-        }
+        "(" => parse_list(stream)?,
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
         "nil" => Expr::Nil,
@@ -192,8 +193,6 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
 }
 
 fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
-    // debug_assert_eq!(stream.next().context("Missing \"(\"")?, "(");
-
     let mut list = Vec::new();
 
     loop {

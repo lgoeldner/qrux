@@ -5,48 +5,20 @@ use std::rc::Rc;
 use crate::read::Expr;
 use crate::{Func, QxErr};
 
-#[derive(Debug, Clone, Default)]
+use self::core::{builtins, int_ops};
+
+mod core;
+
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct Env {
     outer: Option<Rc<Self>>,
     data: RefCell<HashMap<String, Expr>>,
 }
 
 fn core_map(inp: &str) -> Option<Expr> {
-    macro_rules! int_op_apply {
-        ($($op:tt),+) => {
-            Some(match inp {
-                $(
-                    stringify!($op) => Expr::Func(Func(Rc::new(|_ctx, args: &[Expr]| {
-                        // builtin operators are variadic
-                        let Expr::Int(init) = args[0] else {
-                            return Err(QxErr::NoArgs(Some(args.to_vec())));
-                        };
+    let res = int_ops(inp).or_else(|| builtins(inp));
 
-                        args.iter()
-                            .skip(1)
-                            .try_fold(init, |acc, it| {
-                                if let Expr::Int(it) = it {
-                                    Ok(acc $op it)
-                                } else {
-                                    Err(QxErr::NoArgs(Some(args.to_vec())))
-                                }
-                            })
-                            .map(Expr::Int)
-                    }))),
-                )+
-                _ => None?,
-            })
-        };
-    }
-
-    let ops_res = int_op_apply!(+, -, *, /, %);
-    // let cmp_res = ops_res.or_else(|| match inp {
-
-
-    //     any =>
-    // });
-        ops_res
-    // cmp_res
+    res
 }
 
 fn default_env_map() -> HashMap<String, Expr> {

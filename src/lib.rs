@@ -1,11 +1,12 @@
 #![warn(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
-use std::{collections::HashMap, path::PathBuf, rc::Rc};
+use std::{path::PathBuf, rc::Rc};
 
 use colored::Colorize;
 use reedline::{DefaultPrompt, FileBackedHistory, Reedline};
 
-use env::{Env, EnvObj};
+use env::Env;
 use read::{Expr, QxErr};
 
 type FuncT = Rc<dyn Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>>;
@@ -17,9 +18,22 @@ pub struct Runtime {
 
 pub struct Func(FuncT);
 
+impl Eq for Func {}
+impl PartialEq for Func {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 impl Func {
     pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, read::QxErr> {
         self.0(ctx, args)
+    }
+
+    pub fn new_expr(
+        f: impl Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr> + 'static,
+    ) -> Expr {
+        Expr::Func(Self(Rc::new(f)))
     }
 }
 
