@@ -81,7 +81,7 @@ impl Closure {
         Self {
             args_name,
             body: Box::new(body),
-            captured,
+            captured: dbg!(captured),
         }
     }
 
@@ -92,11 +92,11 @@ impl Closure {
         // ctx.env = ;
         let res = ctx.eval(
             *self.body.clone(),
-            Some(&dbg!(Env::with_outer_args(
-                Rc::clone(&self.captured),
+            Some(Env::with_outer_args(
+                Rc::clone(dbg!(&self.captured)),
                 args,
                 &self.args_name,
-            ))),
+            )),
         )?;
 
         // restore

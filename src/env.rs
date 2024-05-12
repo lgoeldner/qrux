@@ -83,7 +83,7 @@ impl Env {
                 .insert(ident.as_ref().to_string(), arg.clone());
         }
 
-        env
+        dbg!(env)
     }
 
     pub fn with_outer(outer: Rc<Self>) -> Rc<Self> {
@@ -94,7 +94,7 @@ impl Env {
     }
 
     pub fn outer(&self) -> Option<Rc<Self>> {
-        self.outer.as_ref().map(Rc::clone)
+        self.outer.clone()
     }
 }
 
