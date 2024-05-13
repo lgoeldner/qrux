@@ -7,7 +7,7 @@ use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{env::Env, Func, lazy::Lazy, Runtime, Term};
+use crate::{env::Env, lazy::Lazy, Func, Runtime, Term};
 
 use self::stream::TokenStream;
 
@@ -144,6 +144,14 @@ impl TryFrom<TokenStream<'_>> for Expr {
     }
 }
 
+impl core::str::FromStr for Expr {
+    type Err = QxErr;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Input(s.to_owned()).tokenize().try_into()
+    }
+}
+
 pub struct Input(pub String);
 impl Input {
     pub fn get(ctx: &mut Term) -> PResult<Self> {
@@ -165,6 +173,12 @@ fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
 
         ast.push(t);
     }
+
+    // match ast.as_slice() {
+    //     [Expr::List(_)] => Ok(ast.swap_remove(0)),
+
+    //     _ => Ok(Expr::List(ast)),
+    // }
 
     Ok(Expr::List(ast))
 }

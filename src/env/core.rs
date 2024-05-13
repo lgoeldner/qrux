@@ -1,3 +1,6 @@
+use std::backtrace::Backtrace;
+use std::borrow::Borrow;
+
 use anyhow::Context;
 
 use crate::read::Expr;
@@ -89,18 +92,18 @@ pub fn builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
         "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
         "list" => func_expr! { it in Expr::List(it.to_vec()) },
-        "list?" => {
-            func_expr! { [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_))) }
-        }
+        "list?" => func_expr! {
+            [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_)))
+        },
         "empty?" => func_expr! { [Expr::List(l)] => Expr::Bool(l.is_empty()) },
         "count" => {
             func_expr! {
                 [Expr::List(l)] => Expr::Int( l.len().try_into().context("Integer Overflow")? )
             }
         }
-        "println" => func_expr! { it in println!("{it:?}"); Nil },
+        "println" => func_expr! {[expr] => { println!("{expr}"); Expr::Nil }},
         "read-string" => {
-            func_expr!( [Expr::String(s)] => read::Input(s.to_owned()).tokenize().try_into()? )
+            func_expr! { [Expr::String(s)] => read::Input(s.to_owned()).tokenize().try_into()? }
         }
         "slurp" => func_expr! { [Expr::String(s)] => {
                  Expr::String(
@@ -109,11 +112,16 @@ pub fn builtins(ident: &str) -> Option<Expr> {
             }
         },
         "eval" => func_expr! {
-            ctx: ctx; [ast] => {
-                ctx.eval(ast.clone(), None)?
+            ctx: ctx; [ast] => ctx.eval(ast.clone(), None)?
+        },
+        "*ENV*" => func_expr! {
+            ctx: ctx; [] => { println!("{:#?}", ctx.env); Expr::Nil }
+        },
+        "trace" => func_expr! {
+            _ in {
+                println!("[{} {} {}] {}",file!(), line!(), column!(), Backtrace::force_capture()); Expr::Nil
             }
         },
-
         _ => None?,
     })
 }

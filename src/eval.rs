@@ -102,7 +102,7 @@ impl Runtime {
                         unreachable!()
                     };
 
-                    match self.specials(ident, lst, env.clone()) {
+                    match self.apply(ident, lst, env.clone()) {
                         ControlFlow::Break(res) => res,
 
                         ControlFlow::Continue(EvalTco {
@@ -121,7 +121,7 @@ impl Runtime {
         }
     }
 
-    fn specials(
+    fn apply(
         &mut self,
         ident: &str,
         lst: &[Expr],
@@ -161,7 +161,7 @@ impl Runtime {
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
             ("prn", [arg]) => {
-                println!("{arg}");
+                println!("{arg:?}");
                 ret_ok!(Expr::Nil)
             }
             ("prn", _) => err!(form: "(prn <expr>)"),

@@ -2,14 +2,13 @@
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 // #![feature(try_trait_v2)]
 
-
 use std::{path::PathBuf, rc::Rc};
 
 use colored::Colorize;
 use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::Env;
-use read::{Expr, QxErr};
+use read::{Expr, Input, QxErr};
 
 type FuncT = Rc<dyn Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>>;
 
@@ -54,10 +53,20 @@ impl Clone for Func {
 impl Runtime {
     #[must_use]
     pub fn new(repl: Term) -> Self {
-        Self {
+        let mut s = Self {
             repl,
             env: Env::new(),
-        }
+        };
+
+        s.eval(
+            include_str!("init.qx")
+                .parse()
+                .expect("builtin prelude failed"),
+            None,
+        )
+        .expect("builtin prelude failed");
+
+        s
     }
 
     pub fn read_from_stdin(&mut self) -> Result<read::AST, read::QxErr> {
@@ -98,29 +107,3 @@ pub mod eval;
 pub mod lazy;
 pub mod print;
 pub mod read;
-
-impl std::fmt::Display for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn write_list(f: &mut std::fmt::Formatter, list: &[Expr]) -> Result<(), std::fmt::Error> {
-            write!(f, "(")?;
-
-            list.iter()
-                .map(std::string::ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(" ")
-                .fmt(f)?;
-
-            write!(f, ")")
-        }
-
-        match self {
-            Self::Int(int) => int.to_string().cyan().fmt(f),
-            Self::Sym(sym) => sym.to_string().red().fmt(f),
-            Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
-            Self::List(list) => write_list(f, list),
-            Self::Nil => "nil".bold().blue().fmt(f),
-            Self::Func(_) | Self::Closure(_) => "<Func>".red().fmt(f),
-            Self::Bool(b) => b.to_string().bright_blue().fmt(f),
-        }
-    }
-}
