@@ -311,6 +311,7 @@ dependencies = [
  "reedline",
  "regex",
  "thiserror",
+ "unescaper",
 ]
 
 [[package]]
@@ -518,6 +519,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "unescaper"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0adf6ad32eb5b3cadff915f7b770faaac8f7ff0476633aa29eb0d9584d889d34"
+dependencies = [
+ "thiserror",
 ]
 
 [[package]]

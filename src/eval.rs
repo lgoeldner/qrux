@@ -1,4 +1,4 @@
-// use std::ops::ControlFlow;
+use std::ops::ControlFlow;
 use std::rc::Rc;
 
 use anyhow::{anyhow, Context};
@@ -14,8 +14,16 @@ macro_rules! err {
     (form: $form:literal) => {
         return ControlFlow::Break(Err(QxErr::Any(anyhow!(concat!("Correct Form: ", $form)))))
     };
+
     ($err:literal) => {
         Err(QxErr::Any(anyhow!($err)))
+    };
+
+    (break $err:literal) => {
+        ControlFlow::Break(Err(QxErr::Any(anyhow!($err))))
+    };
+    (break $err:expr) => {
+        ControlFlow::Break(Err($err))
     };
 }
 
@@ -63,12 +71,7 @@ macro_rules! early_ret {
 // 	}
 // };
 
-enum ControlFlow<B, C> {
-    Break(B),
-    BreakNone,
-    Continue(C),
-}
-
+#[derive(Debug)]
 struct EvalTco {
     ast: Expr,
     env: Option<Rc<Env>>,
@@ -77,25 +80,31 @@ struct EvalTco {
 impl Runtime {
     // doesnt exist in mal
     pub fn eval_mult(&mut self, ast: AST, env: Option<&Rc<Env>>) -> Result<AST, QxErr> {
-        ast.into_iter()
-            .map(|it| self.eval(it, env.cloned()))
-            .collect::<Result<_, _>>()
+        if let Expr::List(lst) = ast {
+            let mut res = Vec::with_capacity(lst.len());
+
+            for it in lst {
+                res.push(self.eval(it, env.cloned())?);
+            }
+            Ok(Expr::List(res))
+        } else {
+            self.eval(ast, env.cloned())
+        }
     }
 
     pub fn eval(&mut self, mut ast: Expr, mut env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
+        // println!("EVAL");
         'l: loop {
             return match ast {
                 Expr::List(ref lst) if lst.is_empty() => Ok(ast.clone()),
-                Expr::List(ref lst) => {
-                    let ident = if let Expr::Sym(s) = &lst[0] {
-                        s.as_str()
-                    } else {
-                        return self.apply_func(ast, env.as_ref());
+                Expr::List(ref lst) if matches!(&lst[0], Expr::Sym(_)) => {
+                    let Expr::Sym(ref ident) = &lst[0] else {
+                        unreachable!()
                     };
 
                     match self.specials(ident, lst, env.clone()) {
                         ControlFlow::Break(res) => res,
-                        ControlFlow::BreakNone => self.apply_func(ast, env.as_ref()),
+
                         ControlFlow::Continue(EvalTco {
                             ast: new_ast,
                             env: new_env,
@@ -105,12 +114,9 @@ impl Runtime {
                             continue 'l;
                         }
                     }
-                    // Option::map
-                    // self.specials(ident, lst)?
-                    //     .map_or_else(|| self.apply_func(ast, env), Ok)
                 }
-
-                _ => self.replace_eval(ast.clone(), env.as_ref()),
+                
+                _ => self.replace_eval(ast.clone(), env),
             };
         }
     }
@@ -122,42 +128,13 @@ impl Runtime {
         env: Option<Rc<Env>>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         match (ident, &lst[1..]) {
-            ("def!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr)),
+            ("def!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             ("def!", _) => err!(form: "(def! <sym> <expr>)"),
 
-            ("fn*", [Expr::List(args), body]) => {
-                let x = args.iter().map(|it| {
-                    if let Expr::Sym(s) = it {
-                        Ok(s.clone())
-                    } else {
-                        Err(QxErr::Any(anyhow!("Not a symbol: {it:?}")))
-                    }
-                });
-
-                let cl = Closure::new(
-                    early_ret!(x.collect::<Result<_, _>>()),
-                    body.clone(),
-                    Rc::clone(env.as_ref().unwrap_or(&self.env)),
-                );
-
-                ret_ok!(Expr::Closure(cl))
-            }
+            ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body),
             ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
 
-            ("if", [cond, then, ..]) => {
-                let cond = early_ret!(self.eval(cond.clone(), None));
-
-                match cond {
-                    Expr::Bool(false) | Expr::Nil => ControlFlow::Continue(EvalTco {
-                        ast: early_ret!(lst.get(3).cloned(), or QxErr::NoArgs(None)),
-                        env: None,
-                    }),
-                    _ => ControlFlow::Continue(EvalTco {
-                        ast: then.clone(),
-                        env: None,
-                    }),
-                }
-            }
+            ("if", [cond, then, ..]) => self.eval_if(lst, env, cond, then),
             ("if", _) => err!(form: "(if <condition> <then> ?<else>)"),
 
             ("let*", [Expr::List(new_bindings), to_eval]) => {
@@ -174,17 +151,11 @@ impl Runtime {
                     };
 
                     env.set(ident, expr.clone());
-                    // self.defenv(ident, expr)?;
                 }
-
-                // let result = self.eval(to_eval.clone(), Some(&env))?;
-                // self.env = self.env.outer().expect("The env was just defined");
-
-                // ret_ok!(result)
 
                 ControlFlow::Continue(EvalTco {
                     ast: to_eval.clone(),
-                    env: Some(dbg!(env)),
+                    env: Some(env),
                 })
             }
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
@@ -197,37 +168,99 @@ impl Runtime {
 
             ("do", [start @ .., end]) => {
                 for exp in start {
-                    early_ret!(self.eval(exp.clone(), None));
+                    early_ret!(self.eval(exp.clone(), env.clone()));
                 }
 
                 // self.eval(end.clone(), None).map(Some)
                 ControlFlow::Continue(EvalTco {
                     ast: end.clone(),
-                    env: None,
+                    env,
                 })
             }
             ("do", _) => err!(form: "(do <expr>*)"),
 
-            _ => ControlFlow::BreakNone,
+            _ => self.apply_func(Expr::List(lst.to_vec()), env),
         }
     }
 
-    fn apply_func(&mut self, ast: Expr, env: Option<&Rc<Env>>) -> Result<Expr, QxErr> {
-        let Expr::List(new) = &self.replace_eval(ast, env)? else {
+    fn eval_if(
+        &mut self,
+        lst: &[Expr],
+        env: Option<Rc<Env>>,
+        cond: &Expr,
+        then: &Expr,
+    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+        let cond = early_ret!(self.eval(cond.clone(), env.clone()));
+
+        match cond {
+            Expr::Bool(false) | Expr::Nil => ControlFlow::Continue(EvalTco {
+                ast: early_ret!(lst.get(3).cloned(), or QxErr::NoArgs(None)),
+                env,
+            }),
+            _ => ControlFlow::Continue(EvalTco {
+                ast: then.clone(),
+                env,
+            }),
+        }
+    }
+
+    fn create_closure(
+        &mut self,
+        env: &Option<Rc<Env>>,
+        args: &Vec<Expr>,
+        body: &Expr,
+    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+        let x = args.iter().map(|it| {
+            if let Expr::Sym(s) = it {
+                Ok(s.clone())
+            } else {
+                Err(QxErr::Any(anyhow!("Not a symbol: {it:?}")))
+            }
+        });
+
+        let cl = Closure::new(
+            early_ret!(x.collect::<Result<_, _>>()),
+            body.clone(),
+            Rc::clone(env.as_ref().unwrap_or(&self.env)),
+        );
+
+        ret_ok!(Expr::Closure(cl))
+    }
+
+    fn apply_func(
+        &mut self,
+        ast: Expr,
+        env: Option<Rc<Env>>,
+    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+        let Expr::List(new) = (match self.replace_eval(ast, env) {
+            Ok(o) => o,
+            Err(e) => return err!(break e),
+        }) else {
             unreachable!()
         };
 
         match new.as_slice() {
-            [Expr::Func(func), args @ ..] => func.apply(self, args),
-            [Expr::Closure(closure), args @ ..] => closure.apply(self, args),
+            [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
+            [Expr::Closure(Closure {
+                args_name,
+                captured,
+                body,
+            }), args @ ..] => {
+                let new_env = Some(Env::with_outer_args(Rc::clone(captured), args, args_name));
 
-            [err, ..] => err!("Not a Function: {err:?}"),
-            [] => Err(QxErr::NoArgs(None)),
+                ControlFlow::Continue(EvalTco {
+                    ast: *body.clone(),
+                    env: new_env,
+                })
+            }
+
+            [err, ..] => err!(break "Not a Function: {err:?}"),
+            [] => err!(break QxErr::NoArgs(None)),
         }
     }
 
-    fn defenv(&mut self, ident: &str, expr: &Expr) -> Result<Expr, QxErr> {
-        let res = self.eval(expr.clone(), None)?;
+    fn defenv(&mut self, ident: &str, expr: &Expr, env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
+        let res = self.eval(expr.clone(), env)?;
         self.env.set(ident, res);
 
         Ok(Expr::Nil)
@@ -236,13 +269,13 @@ impl Runtime {
     // named eval_ast in mal
     // replaces symbols with their values
     // evaluates lists
-    pub fn replace_eval(&mut self, ast: Expr, env: Option<&Rc<Env>>) -> Result<Expr, QxErr> {
+    pub fn replace_eval(&mut self, ast: Expr, env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
         Ok(match ast {
             Expr::Sym(sym) => env
-                .unwrap_or(&self.env)
+                .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
                 .context(format!("Unbound identifier [ {sym} ]"))?,
-            Expr::List(lst) => Expr::List(self.eval_mult(lst, env)?),
+            Expr::List(_) => self.eval_mult(ast, env.as_ref())?,
             val => val,
         })
     }

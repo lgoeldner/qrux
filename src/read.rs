@@ -1,13 +1,13 @@
 // #![warn(clippy::pedantic, clippy::nursery)]
 
-use std::{rc::Rc, vec};
+use std::{borrow::Borrow, rc::Rc, vec};
 
 use anyhow::{anyhow, Context};
 use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{env::Env, lazy::Lazy, Func, Runtime, Term};
+use crate::{env::Env, Func, lazy::Lazy, Runtime, Term};
 
 use self::stream::TokenStream;
 
@@ -47,7 +47,7 @@ pub enum QxErr {
     TypeErr { expected: Expr, found: Expr },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ParenType {
     Open,
     Close,
@@ -64,9 +64,9 @@ impl std::fmt::Display for ParenType {
 
 #[derive(Clone, Debug)]
 pub struct Closure {
-    args_name: Vec<String>,
-    body: Box<Expr>,
-    captured: Rc<Env>,
+    pub args_name: Vec<String>,
+    pub body: Box<Expr>,
+    pub captured: Rc<Env>,
 }
 
 impl Eq for Closure {}
@@ -81,7 +81,7 @@ impl Closure {
         Self {
             args_name,
             body: Box::new(body),
-            captured: dbg!(captured),
+            captured: captured,
         }
     }
 
@@ -93,7 +93,7 @@ impl Closure {
         let res = ctx.eval(
             *self.body.clone(),
             Some(Env::with_outer_args(
-                Rc::clone(dbg!(&self.captured)),
+                Rc::clone(&self.captured),
                 args,
                 &self.args_name,
             )),
@@ -121,8 +121,7 @@ pub fn tokenize(input: &str) -> TokenStream {
 
     RE.find_iter(input)
         .map(|it| it.as_str().trim())
-        .filter(|it| !it.is_empty())
-        .filter(|comment| !comment.starts_with(';'))
+        .filter(|it| !it.is_empty() && !it.starts_with(';'))
         .collect()
 }
 
@@ -138,14 +137,14 @@ pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<AST> {
     Input::get(runtime.term())?.tokenize().try_into()
 }
 
-impl TryFrom<TokenStream<'_>> for Vec<Expr> {
+impl TryFrom<TokenStream<'_>> for Expr {
     type Error = QxErr;
     fn try_from(value: TokenStream<'_>) -> Result<Self, Self::Error> {
         parse(value)
     }
 }
 
-struct Input(pub String);
+pub struct Input(pub String);
 impl Input {
     pub fn get(ctx: &mut Term) -> PResult<Self> {
         Ok(Self(get_inp(ctx)?))
@@ -156,20 +155,18 @@ impl Input {
     }
 }
 
-pub type AST = Vec<Expr>;
+pub type AST = Expr;
 
 fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
     let mut ast = vec![];
 
     while tokens.peek().is_some() {
-        // let token = tokens.peek().context("Missing token")?;
-
         let t = parse_atom(&mut tokens)?;
 
         ast.push(t);
     }
 
-    Ok(ast)
+    Ok(Expr::List(ast))
 }
 
 fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
@@ -190,12 +187,16 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
             )
         }
 
-        string if (string.starts_with('"') && string.ends_with('"')) => {
-            if string.len() == 1 {
+        string if (string.starts_with('"')) => {
+            if string.len() == 1 || !string.ends_with('"') {
                 return Err(QxErr::MissingToken(anyhow!("Second String delimiter")));
             }
 
-            Expr::String(string[1..string.len() - 1].to_owned())
+            Expr::String(
+                unescaper::unescape(&string[1..string.len() - 1]).map_err(|err| {
+                    QxErr::Any(anyhow!("Failed to unescape string: {string:?}, Err: {err}"))
+                })?,
+            )
         }
         sym => Expr::Sym(sym.to_string()),
     })

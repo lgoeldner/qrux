@@ -1,11 +1,22 @@
 use anyhow::Context;
 
 use crate::read::Expr;
-use crate::{Func, QxErr};
+use crate::{read, Func, QxErr};
 
-macro_rules! funcexpr {
+#[macro_export]
+macro_rules! func_expr {
     ($args_pat:pat => $exp:expr) => {
         Func::new_expr(|_ctx, args| {
+            if let $args_pat = args {
+                Ok($exp)
+            } else {
+                Err(QxErr::NoArgs(Some(args.to_vec())))
+            }
+        })
+    };
+
+    (ctx: $ident:ident; $args_pat:pat => $exp:expr) => {
+        Func::new_expr(|$ident, args| {
             if let $args_pat = args {
                 Ok($exp)
             } else {
@@ -22,15 +33,14 @@ macro_rules! funcexpr {
         })
     };
 
-	// side effects only
-	( $irref:pat in $expr:expr; Nil) => {
+    // side effects only
+    ( $irref:pat in $expr:expr; Nil) => {
         Func::new_expr(|_ctx, args| {
             let $irref = args;
-			let _ = $expr;
+            let _ = $expr;
             Ok(Expr::Nil)
         })
     };
-
 }
 
 pub fn cmp_ops(ident: &str) -> Option<Expr> {
@@ -38,7 +48,7 @@ pub fn cmp_ops(ident: &str) -> Option<Expr> {
 		(match $ident:ident => { $($op:tt),+ }) => {
 			match $ident {
 				$(
-					stringify!($op) => funcexpr! { [Expr::Int(l), Expr::Int(r)] => Expr::Bool(l $op r) },
+					stringify!($op) => func_expr! { [Expr::Int(l), Expr::Int(r)] => Expr::Bool(l $op r) },
 				)+
 				_ => None?,
 			}
@@ -77,18 +87,32 @@ pub fn int_ops(ident: &str) -> Option<Expr> {
 
 pub fn builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
-        "=" => funcexpr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
-        "list" => funcexpr! { it in Expr::List(it.to_vec()) },
+        "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
+        "list" => func_expr! { it in Expr::List(it.to_vec()) },
         "list?" => {
-            funcexpr! { [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_))) }
+            func_expr! { [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_))) }
         }
-        "empty?" => funcexpr! { [Expr::List(l)] => Expr::Bool(l.is_empty()) },
+        "empty?" => func_expr! { [Expr::List(l)] => Expr::Bool(l.is_empty()) },
         "count" => {
-            funcexpr! {
+            func_expr! {
                 [Expr::List(l)] => Expr::Int( l.len().try_into().context("Integer Overflow")? )
             }
         }
-        "println" => funcexpr! { it in println!("{it:?}"); Nil },
+        "println" => func_expr! { it in println!("{it:?}"); Nil },
+        "read-string" => {
+            func_expr!( [Expr::String(s)] => read::Input(s.to_owned()).tokenize().try_into()? )
+        }
+        "slurp" => func_expr! { [Expr::String(s)] => {
+                 Expr::String(
+                    std::fs::read_to_string(s).map_err(|err| QxErr::Any(err.into()))?
+                )
+            }
+        },
+        "eval" => func_expr! {
+            ctx: ctx; [ast] => {
+                ctx.eval(ast.clone(), None)?
+            }
+        },
 
         _ => None?,
     })

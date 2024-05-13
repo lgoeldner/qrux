@@ -3,13 +3,18 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::read::Expr;
-use crate::{Func, QxErr};
 
 use self::core::{builtins, cmp_ops, int_ops};
 
 mod core;
+//
+// macro_rules! map {
+//     ($($k:expr => $v:expr),* $(,)?) => {{
+//         ::core::convert::From::from([$(($k.to_owned(), $v),)*])
+//     }};
+// }
 
-#[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub struct Env {
     outer: Option<Rc<Self>>,
     data: RefCell<HashMap<String, Expr>>,
@@ -19,49 +24,6 @@ fn core_map(inp: &str) -> Option<Expr> {
     int_ops(inp)
         .or_else(|| cmp_ops(inp))
         .or_else(|| builtins(inp))
-}
-
-fn _default_env_map() -> HashMap<String, Expr> {
-    macro_rules! int_op_apply2 {
-            ($($op:tt)+) => {
-                [
-                    $((
-                        // name
-                        stringify!($op).to_owned(),
-
-                        Func(Rc::new(|_ctx, args: &[Expr]| {
-
-                            // builtin operators are variadic
-                            let Expr::Int(init) = args[0] else {
-                                return Err(QxErr::NoArgs(Some(args.to_vec())));
-                            };
-
-                            args
-                            .iter()
-                            .skip(1)
-                            .try_fold(init, |acc, it| {
-                                if let Expr::Int(it) = it {
-                                    Ok(acc $op it)
-                                } else {
-                                    Err(QxErr::NoArgs(Some(args.to_vec())))
-                                }
-                            })
-                            .map(|it| Expr::Int(it))
-                        } )),
-                    ),)+
-                ]
-            };
-        }
-
-    let list: &[(String, Func)] = &int_op_apply2!(+ - * / %);
-
-    let mut map = HashMap::new();
-
-    for (k, v) in list {
-        map.insert(k.to_string(), Expr::Func(v.clone()));
-    }
-
-    map
 }
 
 impl Env {
@@ -83,7 +45,7 @@ impl Env {
                 .insert(ident.as_ref().to_string(), arg.clone());
         }
 
-        dbg!(env)
+        env
     }
 
     pub fn with_outer(outer: Rc<Self>) -> Rc<Self> {
