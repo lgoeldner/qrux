@@ -1,38 +1,3 @@
-(not false)
-"\"
-"\n"
-(eval "(println "hello")")
-(eval "(println \"hello\")")
-(eval "(* 2 3)")
-(read-string "(println 20)")
-(read-string "")
-(eval (read-string "(println 20)"))
-(read-string "(println 20)")
-(println 20)
-()
-29
-()
-(())
-((()
-(println 20)
-(read "20")
-(* 20 20)
-(if true (println "hello"))
-(println "hello")
-(slurp "hello.txt")
-(def! rf (fn* (inp) (read-string (slurp inp))))
-(rf "src/init.lisp")
-(not true)
-(*ENV*)
-(def! evv (fn* (e) e) )
-(evv (read-string "(println 20)" ))
-(read-string 20)
-(read-string "heo")
-(:f)
-(def! :f (fn* (path) (eval (read-string (slurp path))) ))
-(def! mal (list + 2 1) )
-(eval mal)
-(mal)
 mal
 str
 ((println 20))
@@ -48,3 +13,38 @@ nil
 (trace)
 nil
 "hello"
+(count (hello))
+(count (list 100 300))
+(+ 10 (count (list 100 300)))
+(prn "hello")
+(prn ("hello" 20 39 ))
+(not true)
+load_file
+(load_file)
+load_file
+prn
+(prn)
+(str ("hello" help))
+(str ("hello"))
+lf
+(println lf)
+lf
+(println lf)
+(nil)
+nil
+true
+false
+nil
+"fel"
+fel
+lf test.qx
+lf "test.qx"
+(lf "test.qx")
+(eval (lf "test.qx"))
+(lf test.qx)
+(lf "test.qx")
+nil 20
+(20 39)
+nil 20
+(lf "test.qx")
+(eval (read-string "(println 20) (+ 20 39)"))

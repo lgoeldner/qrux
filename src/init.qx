@@ -1,7 +1,13 @@
 (def! not 
 (fn* (a) 
-		  	(if a 
-				false 
-				true)))
+	(if a 
+		false 
+		true)))
 
 
+(def! lf
+(fn* (path)
+	(eval 
+		(read-string
+			(str "(do"
+				(slurp path) ")" )))))

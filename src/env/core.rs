@@ -101,7 +101,11 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                 [Expr::List(l)] => Expr::Int( l.len().try_into().context("Integer Overflow")? )
             }
         }
-        "println" => func_expr! {[expr] => { println!("{expr}"); Expr::Nil }},
+        "println" => func_expr! {[expr] => { println!("{expr:#}"); Expr::Nil }},
+        "prn" => func_expr! {[expr] => { println!("{expr}"); Expr::Nil }},
+        "str" => {
+            func_expr! {any in { println!("{}", any.iter().map(ToString::to_string).collect::<String>()); Expr::Nil }}
+        }
         "read-string" => {
             func_expr! { [Expr::String(s)] => read::Input(s.to_owned()).tokenize().try_into()? }
         }

@@ -79,17 +79,17 @@ struct EvalTco {
 
 impl Runtime {
     // doesnt exist in mal
-    pub fn eval_mult(&mut self, ast: AST, env: Option<&Rc<Env>>) -> Result<AST, QxErr> {
+    pub fn eval_mult(&mut self, ast: AST, env: Option<&Rc<Env>>) -> Result<Vec<Expr>, QxErr> {
         if let Expr::List(lst) = ast {
             let mut res = Vec::with_capacity(lst.len());
 
             for it in lst {
                 res.push(self.eval(it, env.cloned())?);
             }
-            Ok(Expr::List(res))
+            Ok(res)
         } else {
-            self.eval(ast, env.cloned())
-        }
+			unreachable!()
+		}
     }
 
     pub fn eval(&mut self, mut ast: Expr, mut env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
@@ -115,7 +115,7 @@ impl Runtime {
                         }
                     }
                 }
-                
+
                 _ => self.replace_eval(ast.clone(), env),
             };
         }
@@ -160,20 +160,20 @@ impl Runtime {
             }
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
-            ("prn", [arg]) => {
-                println!("{arg:?}");
-                ret_ok!(Expr::Nil)
-            }
-            ("prn", _) => err!(form: "(prn <expr>)"),
+            // ("prn", [arg]) => {
+            //     println!("{arg:?}");
+            //     ret_ok!(Expr::Nil)
+            // }
+            // ("prn", _) => err!(form: "(prn <expr>)"),
 
-            ("do", [start @ .., end]) => {
+            ("do", [start @ .., last_expr]) => {
                 for exp in start {
                     early_ret!(self.eval(exp.clone(), env.clone()));
                 }
 
                 // self.eval(end.clone(), None).map(Some)
                 ControlFlow::Continue(EvalTco {
-                    ast: end.clone(),
+                    ast: last_expr.clone(),
                     env,
                 })
             }
@@ -275,7 +275,7 @@ impl Runtime {
                 .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
                 .context(format!("Unbound identifier [ {sym} ]"))?,
-            Expr::List(_) => self.eval_mult(ast, env.as_ref())?,
+            Expr::List(_) => Expr::List(self.eval_mult(ast, env.as_ref())?),
             val => val,
         })
     }
