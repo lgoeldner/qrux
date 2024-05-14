@@ -1,13 +1,21 @@
 // #![warn(clippy::pedantic, clippy::nursery)]
 
-use std::{borrow::Borrow, rc::Rc, vec};
+use std::{
+    borrow::Borrow,
+    rc::{Rc, Weak},
+    vec,
+};
 
 use anyhow::{anyhow, Context};
 use reedline::Signal;
 use regex::Regex;
 use thiserror::Error;
 
-use crate::{env::Env, lazy::Lazy, Func, Runtime, Term};
+use crate::{
+    env::{Env, _Inner},
+    lazy::Lazy,
+    Func, Runtime, Term,
+};
 
 use self::stream::TokenStream;
 
@@ -66,7 +74,7 @@ impl std::fmt::Display for ParenType {
 pub struct Closure {
     pub args_name: Vec<String>,
     pub body: Box<Expr>,
-    pub captured: Rc<Env>,
+    pub captured: Env,
 }
 
 impl Eq for Closure {}
@@ -77,32 +85,13 @@ impl PartialEq for Closure {
 }
 
 impl Closure {
-    pub fn new(args_name: Vec<String>, body: Expr, captured: Rc<Env>) -> Self {
+    pub fn new(args_name: Vec<String>, body: Expr, captured: Env) -> Self {
         Self {
             args_name,
             body: Box::new(body),
             captured,
         }
     }
-
-    // pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, QxErr> {
-    //     // define new env
-    //     // let old_env = Rc::clone(&ctx.env);
-
-    //     // ctx.env = ;
-    //     let res = ctx.eval(
-    //         *self.body.clone(),
-    //         Some(Env::with_outer_args(
-    //             Rc::clone(&self.captured),
-    //             args,
-    //             &self.args_name,
-    //         )),
-    //     )?;
-
-    //     // restore
-    //     // ctx.env = old_env;
-    //     Ok(res)
-    // }
 }
 
 impl std::fmt::Debug for Expr {

@@ -7,14 +7,14 @@ use std::{path::PathBuf, rc::Rc};
 use colored::Colorize;
 use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
-use env::Env;
+use env::{Env, _Inner};
 use read::{Expr, Input, QxErr};
 
 type FuncT = Rc<dyn Fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>>;
 
 pub struct Runtime {
     repl: Term,
-    env: Rc<Env>,
+    env: Env,
 }
 
 pub struct Func(FuncT);
@@ -55,7 +55,7 @@ impl Runtime {
     pub fn new(repl: Term) -> Self {
         let mut s = Self {
             repl,
-            env: Env::new(),
+            env: _Inner::new_env(None),
         };
 
         s.eval(

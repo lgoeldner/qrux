@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
+use std::{cell::RefCell, mem};
 
 use crate::read::Expr;
 
@@ -8,11 +8,25 @@ use self::core::{builtins, cmp_ops, int_ops};
 
 mod core;
 
-#[derive(Debug, Clone, Eq, PartialEq, Default)]
-pub struct Env {
-    outer: Option<Rc<Self>>,
+#[derive(Debug, Clone, Default)]
+pub struct _Inner {
+    outer: Option<Env>,
     data: RefCell<HashMap<String, Expr>>,
+    _selfref: Weak<_Inner>,
 }
+
+#[derive(Debug, Clone, Default)]
+pub struct Env(Rc<_Inner>);
+
+impl Drop for _Inner {
+    fn drop(&mut self) {
+
+        println!("dropping inner TODO");
+
+    }
+}
+
+
 
 fn core_map(inp: &str) -> Option<Expr> {
     int_ops(inp)
@@ -20,21 +34,23 @@ fn core_map(inp: &str) -> Option<Expr> {
         .or_else(|| builtins(inp))
 }
 
-impl Env {
+impl _Inner {
+    
     #[must_use]
-    pub fn new() -> Rc<Self> {
-        Rc::new(Self::default())
+    pub fn new_env(outer: Option<Env>) -> Env {
+        Env(Rc::new_cyclic(|cycle| Self {
+            outer,
+            data: RefCell::default(),
+            _selfref: cycle.clone(),
+        }))
     }
 
-    pub fn with_outer_args(
-        outer: Rc<Self>,
-        args: &[Expr],
-        argsident: &[impl AsRef<str>],
-    ) -> Rc<Self> {
+    pub fn with_outer_args(outer: Env, args: &[Expr], argsident: &[impl AsRef<str>]) -> Env {
         let env = Self::with_outer(outer);
 
         for (arg, ident) in args.iter().zip(argsident) {
-            env.data
+            env.0
+                .data
                 .borrow_mut()
                 .insert(ident.as_ref().to_string(), arg.clone());
         }
@@ -42,58 +58,47 @@ impl Env {
         env
     }
 
-    pub fn with_outer(outer: Rc<Self>) -> Rc<Self> {
-        Rc::new(Self {
-            outer: Some(outer),
-            data: RefCell::new(HashMap::new()),
-        })
+    #[must_use]
+    pub fn with_outer(outer: Env) -> Env {
+        Self::new_env(Some(outer))
     }
 
     pub fn outer(&self) -> Option<Rc<Self>> {
-        self.outer.clone()
+        self.outer.as_ref().map(|it| &it.0).cloned()
     }
 }
 
 mod private {
+    use super::Env;
+    use crate::env::_Inner;
     use std::rc::Rc;
 
-    use crate::env::Env;
-
     pub trait Sealed {}
-    impl Sealed for Rc<Env> {}
+    impl Sealed for Rc<_Inner> {}
+    impl Sealed for Env {}
 }
 
-pub trait EnvObj: private::Sealed {
-    fn get(&self, ident: &str) -> Option<Expr>;
-    fn set(&self, ident: &str, val: Expr);
-    fn find(&self, ident: &str) -> Option<Rc<Env>>;
-}
-
-impl EnvObj for Rc<Env> {
-    fn get(&self, ident: &str) -> Option<Expr> {
+impl Env {
+    pub fn get(&self, ident: &str) -> Option<Expr> {
         self.find(ident).map_or_else(
             || core_map(ident),
-            |env| env.data.borrow().get(ident).cloned(),
+            |env| env.0.data.borrow().get(ident).cloned(),
         )
     }
 
-    fn set(&self, ident: &str, val: Expr) {
-        self.data.borrow_mut().insert(ident.to_owned(), val);
+    pub fn set(&self, ident: &str, val: Expr) {
+        self.0.data.borrow_mut().insert(ident.to_owned(), val);
     }
 
-    fn find(&self, ident: &str) -> Option<Rc<Env>> {
+    pub fn find(&self, ident: &str) -> Option<Env> {
         // check if self contains the key,
-        self.data
+        self.0
+            .data
             .borrow()
             .contains_key(ident)
             // then return self
-            .then(|| Rc::clone(self))
+            .then(|| self.clone())
             // or delegate to the outer env
-            .or_else(|| {
-                self.outer
-                    .as_ref()
-                    // .or_else(|| )
-                    .and_then(|it| it.find(ident))
-            })
+            .or_else(|| self.0.outer.as_ref().and_then(|it| it.find(ident)))
     }
 }

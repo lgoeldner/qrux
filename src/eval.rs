@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use anyhow::{anyhow, Context};
 
-use crate::env::{Env, EnvObj};
+use crate::env::{Env, _Inner};
 use crate::read::Closure;
 use crate::{
     read::{Expr, QxErr, AST},
@@ -74,11 +74,11 @@ macro_rules! early_ret {
 #[derive(Debug)]
 struct EvalTco {
     ast: Expr,
-    env: Option<Rc<Env>>,
+    env: Option<Env>,
 }
 
 impl Runtime {
-    pub fn eval(&mut self, mut ast: Expr, mut env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
+    pub fn eval(&mut self, mut ast: Expr, mut env: Option<Env>) -> Result<Expr, QxErr> {
         'l: loop {
             return match ast {
                 Expr::List(ref empty) if empty.is_empty() => Ok(ast.clone()),
@@ -109,7 +109,7 @@ impl Runtime {
         &mut self,
         ident: Expr,
         lst: &[Expr],
-        env: Option<Rc<Env>>,
+        env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let Expr::Sym(ref ident) = ident else {
             return self.apply_func(Expr::List(lst.to_vec()), env);
@@ -128,7 +128,7 @@ impl Runtime {
             ("let*", [Expr::List(new_bindings), to_eval]) => {
                 // create new env, set as current, old env is now self.env.outer
 
-                let env = Env::with_outer(Rc::clone(&self.env));
+                let env = _Inner::with_outer(self.env.clone());
 
                 for pair in new_bindings.chunks_exact(2) {
                     let [Expr::Sym(ident), expr] = pair else {
@@ -173,7 +173,7 @@ impl Runtime {
     fn eval_if(
         &mut self,
         lst: &[Expr],
-        env: Option<Rc<Env>>,
+        env: Option<Env>,
         cond: &Expr,
         then: &Expr,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
@@ -193,8 +193,8 @@ impl Runtime {
 
     fn create_closure(
         &mut self,
-        env: &Option<Rc<Env>>,
-        args: &Vec<Expr>,
+        env: &Option<Env>,
+        args: &[Expr],
         body: &Expr,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let x = args.iter().map(|it| {
@@ -208,7 +208,7 @@ impl Runtime {
         let cl = Closure::new(
             early_ret!(x.collect::<Result<_, _>>()),
             body.clone(),
-            Rc::clone(env.as_ref().unwrap_or(&self.env)),
+            env.as_ref().unwrap_or(&self.env).clone(),
         );
 
         ret_ok!(Expr::Closure(cl))
@@ -217,13 +217,13 @@ impl Runtime {
     fn apply_func(
         &mut self,
         ast: Expr,
-        env: Option<Rc<Env>>,
+        env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let new = (match self.replace_eval(ast, env) {
+        let new = match self.replace_eval(ast, env) {
             Ok(Expr::List(new)) => new,
             Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
             Err(e) => return err!(break e),
-        });
+        };
 
         match new.as_slice() {
             [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
@@ -232,7 +232,7 @@ impl Runtime {
                 captured,
                 body,
             }), args @ ..] => {
-                let new_env = Some(Env::with_outer_args(Rc::clone(captured), args, args_name));
+                let new_env = Some(_Inner::with_outer_args(captured.clone(), args, args_name));
 
                 ControlFlow::Continue(EvalTco {
                     ast: *body.clone(),
@@ -245,7 +245,7 @@ impl Runtime {
         }
     }
 
-    fn defenv(&mut self, ident: &str, expr: &Expr, env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
+    fn defenv(&mut self, ident: &str, expr: &Expr, env: Option<Env>) -> Result<Expr, QxErr> {
         let res = self.eval(expr.clone(), env)?;
         self.env.set(ident, res);
 
@@ -255,7 +255,7 @@ impl Runtime {
     // named eval_ast in mal
     // replaces symbols with their values
     // evaluates lists
-    pub fn replace_eval(&mut self, ast: Expr, env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
+    pub fn replace_eval(&mut self, ast: Expr, env: Option<Env>) -> Result<Expr, QxErr> {
         Ok(match ast {
             Expr::Sym(sym) => env
                 .unwrap_or_else(|| self.env.clone())
