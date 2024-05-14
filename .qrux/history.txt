@@ -1,16 +1,3 @@
-mal
-str
-((println 20))
-(eval mal)
-(eval (+ 20 39))
-(eval (read-string "(println \"i was read\")"))
-(def! hello (20 39 +))
-hello
-(println "hello \n")
-(prn "hello")
-(println "hello \n")
-nil
-(trace)
 nil
 "hello"
 (count (hello))
@@ -48,3 +35,16 @@ nil 20
 nil 20
 (lf "test.qx")
 (eval (read-string "(println 20) (+ 20 39)"))
+(eval (read-string "(println 20)"))
+(def! re (fn* (string) (eval (read-string string)) ))
+(re "println 20")
+(re "println 40")
+(re "(println 40)")
+(def! fre (fn* (fp) (re (slurp fp))))
+trace
+fre
+jks
+fre
+(20)
+29 04
+19 40

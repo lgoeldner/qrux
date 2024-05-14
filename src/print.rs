@@ -2,7 +2,7 @@ use crate::read::{Expr, AST};
 use colored::Colorize;
 
 pub fn pp_ast(ast: &[AST]) {
-    println!("{ast:#?}",);
+    println!("{ast:?}",);
 }
 
 impl std::fmt::Display for Expr {
@@ -11,7 +11,7 @@ impl std::fmt::Display for Expr {
             write!(f, "(")?;
 
             list.iter()
-                .map(|it| format!("{it:#}"))
+                .map(|it| format!("{it}"))
                 .collect::<Vec<_>>()
                 .join(" ")
                 .fmt(f)?;
@@ -21,16 +21,6 @@ impl std::fmt::Display for Expr {
 
         if f.alternate() {
             match self {
-                Self::Int(int) => int.to_string().cyan().fmt(f),
-                Self::Sym(sym) => sym.to_string().red().fmt(f),
-                Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
-                Self::List(list) => write_list(f, list),
-                Self::Nil => "nil".bold().blue().fmt(f),
-                Self::Func(_) | Self::Closure(_) => "<Func>".red().fmt(f),
-                Self::Bool(b) => b.to_string().bright_blue().fmt(f),
-            }
-        } else {
-            match self {
                 Self::Int(int) => int.to_string().fmt(f),
                 Self::Sym(sym) => sym.fmt(f),
                 Self::String(string) => string.fmt(f),
@@ -38,6 +28,17 @@ impl std::fmt::Display for Expr {
                 Self::Nil => "nil".bold().blue().fmt(f),
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
+            }
+        } else {
+            
+            match self {
+                Self::Int(int) => int.to_string().cyan().fmt(f),
+                Self::Sym(sym) => sym.to_string().red().fmt(f),
+                Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
+                Self::List(list) => write_list(f, list),
+                Self::Nil => "nil".bold().blue().fmt(f),
+                Self::Func(_) | Self::Closure(_) => "<Func>".red().fmt(f),
+                Self::Bool(b) => b.to_string().bright_blue().fmt(f),
             }
         }
     }

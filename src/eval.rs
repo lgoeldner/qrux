@@ -232,12 +232,11 @@ impl Runtime {
         ast: Expr,
         env: Option<Rc<Env>>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let Expr::List(new) = (match self.replace_eval(ast, env) {
-            Ok(o) => o,
+        let new = (match self.replace_eval(ast, env) {
+            Ok(Expr::List(new)) => new,
+            Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
             Err(e) => return err!(break e),
-        }) else {
-            unreachable!()
-        };
+        });
 
         match new.as_slice() {
             [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),

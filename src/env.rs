@@ -7,12 +7,6 @@ use crate::read::Expr;
 use self::core::{builtins, cmp_ops, int_ops};
 
 mod core;
-//
-// macro_rules! map {
-//     ($($k:expr => $v:expr),* $(,)?) => {{
-//         ::core::convert::From::from([$(($k.to_owned(), $v),)*])
-//     }};
-// }
 
 #[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub struct Env {
