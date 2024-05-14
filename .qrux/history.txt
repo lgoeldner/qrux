@@ -1,42 +1,3 @@
-nil
-"hello"
-(count (hello))
-(count (list 100 300))
-(+ 10 (count (list 100 300)))
-(prn "hello")
-(prn ("hello" 20 39 ))
-(not true)
-load_file
-(load_file)
-load_file
-prn
-(prn)
-(str ("hello" help))
-(str ("hello"))
-lf
-(println lf)
-lf
-(println lf)
-(nil)
-nil
-true
-false
-nil
-"fel"
-fel
-lf test.qx
-lf "test.qx"
-(lf "test.qx")
-(eval (lf "test.qx"))
-(lf test.qx)
-(lf "test.qx")
-nil 20
-(20 39)
-nil 20
-(lf "test.qx")
-(eval (read-string "(println 20) (+ 20 39)"))
-(eval (read-string "(println 20)"))
-(def! re (fn* (string) (eval (read-string string)) ))
 (re "println 20")
 (re "println 40")
 (re "(println 40)")
@@ -48,3 +9,42 @@ fre
 (20)
 29 04
 19 40
+29 04
+((fn* (a) (* a a) ))
+((fn* (a) (* a a) ) 4)
+(fn* (a) (* a a) ) 4
+(def! x (fn* (y) y))
+(x 2)
+(x 5)
+(fn* (bb) bb)
+((fn* (bb) bb) 49)
+(((fn* (bb) bb) 49)))
+()()()()()()()()()()()()()())()
+()
+()()()
+ls
+((fn* (a) (* a a)) 3)
+()()()())()()()()()())(()()()())()()())()()))(())(()()()()()()()()()()()()()())()))()(()()()())(()())())(()()()()()()()()()()()()()()()()()()()jkjkjjk()()()()()()()()()()()()()()()()()()()()()()()()()
+()()()()())()()(()()()()()))
+()()()()())()()(()()()()())))
+()()()()())()()(()()()()())
+()()()()())()()(()()()()()
+()()()()())()()(()()()()(
+()()()()())()()(()()()()())))))))))
+()()()()(
+()()()()
+())
+()
+))((
+ls
+(fn* (a) a)
+((fn* (a) a) 20)
+(fn* (a) a) 20
+()
+30
+((fn* (a) a) 4)
+(fn* (a) (empty? a) )
+(fn* (a) (empty? a) ) 30
+((fn* (a) (empty? a) ) 30)
+((fn* (a) a ) 30)
+((fn* (a) a) 30)

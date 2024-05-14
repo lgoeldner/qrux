@@ -78,31 +78,15 @@ struct EvalTco {
 }
 
 impl Runtime {
-    // doesnt exist in mal
-    pub fn eval_mult(&mut self, ast: AST, env: Option<&Rc<Env>>) -> Result<Vec<Expr>, QxErr> {
-        if let Expr::List(lst) = ast {
-            let mut res = Vec::with_capacity(lst.len());
-
-            for it in lst {
-                res.push(self.eval(it, env.cloned())?);
-            }
-            Ok(res)
-        } else {
-			unreachable!()
-		}
-    }
-
     pub fn eval(&mut self, mut ast: Expr, mut env: Option<Rc<Env>>) -> Result<Expr, QxErr> {
-        // println!("EVAL");
         'l: loop {
             return match ast {
-                Expr::List(ref lst) if lst.is_empty() => Ok(ast.clone()),
-                Expr::List(ref lst) if matches!(&lst[0], Expr::Sym(_)) => {
-                    let Expr::Sym(ref ident) = &lst[0] else {
-                        unreachable!()
-                    };
+                Expr::List(ref empty) if empty.is_empty() => Ok(ast.clone()),
 
-                    match self.apply(ident, lst, env.clone()) {
+                Expr::List(list) => {
+                    let ident = list.first().ok_or(QxErr::NoArgs(None))?;
+
+                    match self.apply(ident.clone(), &list, env.clone()) {
                         ControlFlow::Break(res) => res,
 
                         ControlFlow::Continue(EvalTco {
@@ -123,11 +107,15 @@ impl Runtime {
 
     fn apply(
         &mut self,
-        ident: &str,
+        ident: Expr,
         lst: &[Expr],
         env: Option<Rc<Env>>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        match (ident, &lst[1..]) {
+        let Expr::Sym(ref ident) = ident else {
+            return self.apply_func(Expr::List(lst.to_vec()), env);
+        };
+
+        match (ident as &str, &lst[1..]) {
             ("def!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             ("def!", _) => err!(form: "(def! <sym> <expr>)"),
 
@@ -165,7 +153,6 @@ impl Runtime {
             //     ret_ok!(Expr::Nil)
             // }
             // ("prn", _) => err!(form: "(prn <expr>)"),
-
             ("do", [start @ .., last_expr]) => {
                 for exp in start {
                     early_ret!(self.eval(exp.clone(), env.clone()));
@@ -274,7 +261,11 @@ impl Runtime {
                 .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
                 .context(format!("Unbound identifier [ {sym} ]"))?,
-            Expr::List(_) => Expr::List(self.eval_mult(ast, env.as_ref())?),
+            Expr::List(l) => Expr::List(
+                l.into_iter()
+                    .map(|it| self.eval(it, env.clone()))
+                    .collect::<Result<_, _>>()?,
+            ),
             val => val,
         })
     }

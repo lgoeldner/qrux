@@ -1,7 +1,7 @@
-use crate::read::{Expr, AST};
+use crate::read::Expr;
 use colored::Colorize;
 
-pub fn pp_ast(ast: &[AST]) {
+pub fn pp_ast(ast: &Expr) {
     println!("{ast:?}",);
 }
 

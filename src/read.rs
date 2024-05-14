@@ -81,28 +81,28 @@ impl Closure {
         Self {
             args_name,
             body: Box::new(body),
-            captured: captured,
+            captured,
         }
     }
 
-    pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, QxErr> {
-        // define new env
-        // let old_env = Rc::clone(&ctx.env);
+    // pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, QxErr> {
+    //     // define new env
+    //     // let old_env = Rc::clone(&ctx.env);
 
-        // ctx.env = ;
-        let res = ctx.eval(
-            *self.body.clone(),
-            Some(Env::with_outer_args(
-                Rc::clone(&self.captured),
-                args,
-                &self.args_name,
-            )),
-        )?;
+    //     // ctx.env = ;
+    //     let res = ctx.eval(
+    //         *self.body.clone(),
+    //         Some(Env::with_outer_args(
+    //             Rc::clone(&self.captured),
+    //             args,
+    //             &self.args_name,
+    //         )),
+    //     )?;
 
-        // restore
-        // ctx.env = old_env;
-        Ok(res)
-    }
+    //     // restore
+    //     // ctx.env = old_env;
+    //     Ok(res)
+    // }
 }
 
 impl std::fmt::Debug for Expr {
@@ -166,21 +166,21 @@ impl Input {
 pub type AST = Expr;
 
 fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
-    let mut ast = vec![];
+    // let mut ast = vec![];
 
-    while tokens.peek().is_some() {
-        let t = parse_atom(&mut tokens)?;
+    // while tokens.peek().is_some() {
+    //     let t = parse_atom(&mut tokens)?;
 
-        ast.push(t);
-    }
-
+    //     ast.push(t);
+    // }
+    let ast = parse_atom(&mut tokens)?;
     // match ast.as_slice() {
     //     [Expr::List(_)] => Ok(ast.swap_remove(0)),
 
     //     _ => Ok(Expr::List(ast)),
     // }
 
-    Ok(Expr::List(ast))
+    Ok(ast)
 }
 
 fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
