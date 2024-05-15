@@ -1,9 +1,7 @@
 // #![warn(clippy::pedantic, clippy::nursery)]
 
 use std::{
-    borrow::Borrow,
-    rc::{Rc, Weak},
-    vec,
+    borrow::Borrow, cell::RefCell, default, rc::{Rc, Weak}, vec
 };
 
 use anyhow::{anyhow, Context};
@@ -12,7 +10,7 @@ use regex::Regex;
 use thiserror::Error;
 
 use crate::{
-    env::{Env, _Inner},
+    env::{Env, Inner},
     lazy::Lazy,
     Func, Runtime, Term,
 };
@@ -21,8 +19,9 @@ use self::stream::TokenStream;
 
 mod stream;
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
+	Atom(Box<RefCell<Expr>>),
     Closure(Closure),
     Func(Func),
     Int(i64),
@@ -30,6 +29,7 @@ pub enum Expr {
     Sym(String),
     List(Vec<Expr>),
     Bool(bool),
+	#[default]
     Nil,
 }
 
@@ -178,6 +178,12 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     Ok(match raw_token {
         "(" => parse_list(stream)?,
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
+
+		"@" => {
+			let next_expr = parse_atom(stream)?;
+
+			Expr::List(vec![Expr::Sym("deref".into()), next_expr])
+		},
 
         "nil" => Expr::Nil,
         "true" => Expr::Bool(true),

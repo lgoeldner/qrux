@@ -1,13 +1,26 @@
+(do
+
 (def! not 
-(fn* (a) 
-	(if a 
+(fn* (bool) 
+	(if bool 
 		false 
 		true)))
 
+(def! test 
+	  true)
 
-(def! lf
+(def! loadf
 (fn* (path)
 	(eval 
 		(read-string
 			(str "(do"
 				(slurp path) ")" )))))
+
+(def! re
+	(fn* (string)
+		(eval 
+			(read-string string))))
+
+
+
+)

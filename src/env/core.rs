@@ -1,8 +1,11 @@
 use std::backtrace::Backtrace;
-use std::borrow::Borrow;
+use std::borrow::BorrowMut;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use anyhow::Context;
 
+use crate::lazy::Lazy;
 use crate::read::Expr;
 use crate::{read, Func, QxErr};
 
@@ -20,6 +23,16 @@ macro_rules! func_expr {
 
     (ctx: $ident:ident; $args_pat:pat => $exp:expr) => {
         Func::new_expr(|$ident, args| {
+            if let $args_pat = args {
+                Ok($exp)
+            } else {
+                Err(QxErr::NoArgs(Some(args.to_vec())))
+            }
+        })
+    };
+
+    (move ctx: $ident:ident; $args_pat:pat => $exp:expr) => {
+        Func::new_expr(move |$ident, args| {
             if let $args_pat = args {
                 Ok($exp)
             } else {
@@ -88,6 +101,8 @@ pub fn int_ops(ident: &str) -> Option<Expr> {
     int_op_apply!(+, -, *, /, %)
 }
 
+use std::fmt::Write;
+
 pub fn builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
         "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
@@ -103,9 +118,18 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         }
         "println" => func_expr! {[expr] => { println!("{expr:#}"); Expr::Nil }},
         "prn" => func_expr! {[expr] => { println!("{expr}"); Expr::Nil }},
-        "str" => {
-            func_expr! {any in { println!("{}", any.iter().map(ToString::to_string).collect::<String>()); Expr::Nil }}
-        }
+        "str" => func_expr! {
+            any in
+                Expr::String(
+                    any.iter()
+                    .try_fold(String::new(), |mut acc , it| {
+                            write!(acc, "{it:#}")
+                            .map(|()| acc)
+                        })
+                        .map_err(|it| QxErr::Any(it.into()))?
+                )
+        },
+
         "read-string" => {
             func_expr! { [Expr::String(s)] => read::Input(s.to_owned()).tokenize().try_into()? }
         }
@@ -123,9 +147,26 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         },
         "trace" => func_expr! {
             _ in {
-                println!("[{} {} {}] {}",file!(), line!(), column!(), Backtrace::force_capture()); Expr::Nil
+                println!("{}", Backtrace::force_capture()); Expr::Nil
             }
         },
+        "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
+        "atom" => func_expr! { [expr] => Expr::Atom(Box::new(RefCell::new(expr.clone()))) },
+        "atom?" => func_expr!([expr] => Expr::Bool(matches!(expr, Expr::Atom(_)))),
+        "deref" => func_expr! { [Expr::Atom(it)] => it.borrow().clone() },
+        "reset!" => func_expr! { [Expr::Atom(atom), new] => atom.replace(new.clone()) },
+        "swap!" => func_expr! {ctx:ctx; [Expr::Atom(atom), cl @ Expr::Closure(_), args@..] => {
+            let mut expr = vec![cl.clone(), atom.take()];
+
+            expr.append(&mut args.to_vec());
+
+            let res = ctx.eval(Expr::List(dbg!(expr)), None)?;
+
+            atom.replace(res.clone());
+			dbg!(atom);
+
+            res
+        } },
         _ => None?,
     })
 }
