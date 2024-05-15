@@ -21,7 +21,7 @@ mod stream;
 
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
-	Atom(Box<RefCell<Expr>>),
+	Atom(Rc<RefCell<Expr>>),
     Closure(Closure),
     Func(Func),
     Int(i64),
@@ -104,7 +104,7 @@ type PResult<T> = Result<T, QxErr>;
 
 pub fn tokenize(input: &str) -> TokenStream {
     static RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r#"[\s,]*(~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#)
+        Regex::new(r#"[\s,]*((!!)|~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#)
             .unwrap()
     });
 
@@ -181,8 +181,11 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
 
 		"@" => {
 			let next_expr = parse_atom(stream)?;
-
 			Expr::List(vec![Expr::Sym("deref".into()), next_expr])
+		},
+
+		"!!" => {
+			Expr::List(vec![Expr::Sym("atom".into()), parse_atom(stream)?])
 		},
 
         "nil" => Expr::Nil,

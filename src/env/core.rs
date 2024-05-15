@@ -151,7 +151,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
             }
         },
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
-        "atom" => func_expr! { [expr] => Expr::Atom(Box::new(RefCell::new(expr.clone()))) },
+        "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },
         "atom?" => func_expr!([expr] => Expr::Bool(matches!(expr, Expr::Atom(_)))),
         "deref" => func_expr! { [Expr::Atom(it)] => it.borrow().clone() },
         "reset!" => func_expr! { [Expr::Atom(atom), new] => atom.replace(new.clone()) },
@@ -160,10 +160,9 @@ pub fn builtins(ident: &str) -> Option<Expr> {
 
             expr.append(&mut args.to_vec());
 
-            let res = ctx.eval(Expr::List(dbg!(expr)), None)?;
+            let res = ctx.eval(Expr::List(expr), None)?;
 
-            atom.replace(res.clone());
-			dbg!(atom);
+			*RefCell::borrow_mut(atom) = res.clone();
 
             res
         } },
