@@ -1,7 +1,11 @@
 // #![warn(clippy::pedantic, clippy::nursery)]
 
 use std::{
-    borrow::Borrow, cell::RefCell, default, rc::{Rc, Weak}, vec
+    borrow::Borrow,
+    cell::RefCell,
+    default,
+    rc::{Rc, Weak},
+    vec,
 };
 
 use anyhow::{anyhow, Context};
@@ -21,7 +25,7 @@ mod stream;
 
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
-	Atom(Rc<RefCell<Expr>>),
+    Atom(Rc<RefCell<Expr>>),
     Closure(Closure),
     Func(Func),
     Int(i64),
@@ -29,7 +33,7 @@ pub enum Expr {
     Sym(String),
     List(Vec<Expr>),
     Bool(bool),
-	#[default]
+    #[default]
     Nil,
 }
 
@@ -179,15 +183,11 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         "(" => parse_list(stream)?,
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
-		"@" => {
-			let next_expr = parse_atom(stream)?;
-			Expr::List(vec![Expr::Sym("deref".into()), next_expr])
-		},
-
-		"!!" => {
-			Expr::List(vec![Expr::Sym("atom".into()), parse_atom(stream)?])
-		},
-
+        // reader macros //
+        "'" => Expr::List(vec![Expr::Sym("quote".into()), parse_atom(stream)?]),
+        "@" => Expr::List(vec![Expr::Sym("deref".into()), parse_atom(stream)?]),
+        "!!" => Expr::List(vec![Expr::Sym("atom".into()), parse_atom(stream)?]),
+        //--//
         "nil" => Expr::Nil,
         "true" => Expr::Bool(true),
         "false" => Expr::Bool(false),

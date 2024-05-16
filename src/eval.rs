@@ -149,6 +149,8 @@ impl Runtime {
             }
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
+            ("quote", [expr]) => ControlFlow::Break(Ok(expr.clone())),
+
             // ("prn", [arg]) => {
             //     println!("{arg:?}");
             //     ret_ok!(Expr::Nil)

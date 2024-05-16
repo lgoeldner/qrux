@@ -1,46 +1,3 @@
-(println 29 30)
-(println 29)
-(loadf test/incA.qx)
-(loadf "test/incA.qx")
-(*ENV*)
-(loadf "test/incA.qx")
-(atom 288)
-(def! x (atom 299))
-x
-(def! x (atom 299))
-(atom? x)
-(atom? 29)
-(def! x (atom 299))
-(swap! x (fn* (atom) 1000 ))
-x
-(deref x)
-@asdfhj
-@ai
-(def! ai (atom 188))
-@ai
-(def! incr (fn* (i) (+ 1 i)))
-(swap! ai incr)
-@ai
-ai
-(def! incr (fn* (i) (+ 1 i)))
-(def! ai (atom 188))
-(swap! ai incr)
-(def! ai (atom 188))
-(def! incr (fn* (i) (+ 1 i)))
-(swap! ai incr)
-(swap! ai (fn* (a) a))
-(swap! ai (fn* (a) (+ 1 a)))
-(*ENV*)
-@ai
-(*ENV*)
-(def! ai (atom 188))
-(swap! ai (fn* (a) (+ 1 a)))
-@ai
-(def! ai (atom 188))
-(swap! ai (fn* (a) (+ 1 a)))
-@ai
-(swap! ai (fn* (a) (+ 1 a)))
-(def! incr (fn* (i) (+ 1 i)))
 (swap! ai incr)
 (def! ai (atom 188))
 (def! incr (fn* (i) (+ 1 i)))
@@ -48,3 +5,46 @@ ai
 !!
 !!18
 !! 18
+(quote (19 83 29))
+(10 39 48)
+'(10 39 48)
+'(10 39 '48)
+'(10 39 ast)
+'ast
+(eval 'ast)
+(eval '(println 20))
+'(println 20)
+(eval '(println 20))
+(def! l '(100 399 48 18 40))
+l
+&()
+(def! l !!29)
+l
+@l
+(def! x '(println 29))
+x
+(x)
+(eval x)
+@l
+l
+@l
+(def! ++ (fn* (int) (+ 1 int)) )
+(++ 2)
+(swap! l ++)
+@l
+(swap! l ++)
+(do (swap! l ++) @l)
+'()
+()
+'(30)
+(30)
+'(false true 300 199)
+(false true 300 199)
+''(false true 300 199)
+'(false true 300 199)
+'(false true 300 199)'
+'(false true 300 199)'''
+'(false true 300 199)
+(def! cond '(if true false true))
+cond
+(eval cond)
