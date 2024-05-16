@@ -1,4 +1,4 @@
-use qrux::{eval, print::pp_ast, read::QxErr, Runtime, Term};
+use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
 fn main() {
     let mut runtime = Runtime::new(Term::new());

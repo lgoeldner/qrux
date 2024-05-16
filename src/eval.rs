@@ -3,7 +3,7 @@ use std::rc::Rc;
 
 use anyhow::{anyhow, Context};
 
-use crate::env::{Env, _Inner};
+use crate::env::{Env, Inner};
 use crate::read::Closure;
 use crate::{
     read::{Expr, QxErr, AST},
@@ -79,14 +79,14 @@ struct EvalTco {
 
 impl Runtime {
     pub fn eval(&mut self, mut ast: Expr, mut env: Option<Env>) -> Result<Expr, QxErr> {
-        'l: loop {
+        loop {
             return match ast {
                 Expr::List(ref empty) if empty.is_empty() => Ok(ast.clone()),
 
                 Expr::List(list) => {
                     let ident = list.first().ok_or(QxErr::NoArgs(None))?;
 
-                    match self.apply(ident.clone(), &list, env.clone()) {
+                    match self.apply(ident, &list, env.clone()) {
                         ControlFlow::Break(res) => res,
 
                         ControlFlow::Continue(EvalTco {
@@ -95,7 +95,7 @@ impl Runtime {
                         }) => {
                             ast = new_ast;
                             env = new_env;
-                            continue 'l;
+                            continue;
                         }
                     }
                 }
@@ -107,7 +107,7 @@ impl Runtime {
 
     fn apply(
         &mut self,
-        ident: Expr,
+        ident: &Expr,
         lst: &[Expr],
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
@@ -128,7 +128,7 @@ impl Runtime {
             ("let*", [Expr::List(new_bindings), to_eval]) => {
                 // create new env, set as current, old env is now self.env.outer
 
-                let env = _Inner::with_outer(self.env.clone());
+                let env = Inner::with_outer(env.unwrap_or_else(|| self.env.clone()));
 
                 for pair in new_bindings.chunks_exact(2) {
                     let [Expr::Sym(ident), expr] = pair else {
@@ -138,7 +138,8 @@ impl Runtime {
                         }));
                     };
 
-                    env.set(ident, expr.clone());
+                    let val = self.eval(expr.clone(), Some(env.clone()));
+                    env.set(ident, early_ret!(val));
                 }
 
                 ControlFlow::Continue(EvalTco {
@@ -153,9 +154,16 @@ impl Runtime {
             //     ret_ok!(Expr::Nil)
             // }
             // ("prn", _) => err!(form: "(prn <expr>)"),
-            ("do", [start @ .., last_expr]) => {
-                for exp in start {
-                    early_ret!(self.eval(exp.clone(), env.clone()));
+            ("do", exprs) => {
+                let last_expr = match exprs.last() {
+                    None => err!(form: "(do <expr>*)"),
+                    Some(expr) => expr,
+                };
+
+                if exprs.len() > 1 {
+                    for exp in &exprs[..exprs.len() - 1] {
+                        early_ret!(self.eval(exp.clone(), env.clone()));
+                    }
                 }
 
                 // self.eval(end.clone(), None).map(Some)
@@ -164,7 +172,7 @@ impl Runtime {
                     env,
                 })
             }
-            ("do", _) => err!(form: "(do <expr>*)"),
+            // ("do", _) => err!(form: "(do <expr>*)"),
 
             _ => self.apply_func(Expr::List(lst.to_vec()), env),
         }
@@ -232,11 +240,11 @@ impl Runtime {
                 captured,
                 body,
             }), args @ ..] => {
-                let new_env = Some(_Inner::with_outer_args(captured.clone(), args, args_name));
+                let new_env = Inner::with_outer_args(captured.clone(), args, args_name);
 
                 ControlFlow::Continue(EvalTco {
                     ast: *body.clone(),
-                    env: new_env,
+                    env: Some(early_ret!(new_env)),
                 })
             }
 
