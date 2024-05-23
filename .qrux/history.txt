@@ -1,50 +1,50 @@
-(swap! ai incr)
-(def! ai (atom 188))
-(def! incr (fn* (i) (+ 1 i)))
-(swap! ai incr)
-!!
-!!18
-!! 18
-(quote (19 83 29))
-(10 39 48)
-'(10 39 48)
-'(10 39 '48)
-'(10 39 ast)
-'ast
-(eval 'ast)
-(eval '(println 20))
-'(println 20)
-(eval '(println 20))
-(def! l '(100 399 48 18 40))
-l
-&()
-(def! l !!29)
-l
-@l
-(def! x '(println 29))
+true
+(not true)
+`
+`28
+`najsdf
+(289 `+ 28)
+(100 `* 19)
+(100 `* 10)
+(8 `* 3)
+(* 3 8)
+((2 `+ 3) `* 3)
+\38
+(19 \+ 48)
+(19 \- 5)
+(19 - 5)
+(19 \- 5)
+(19 ,- 5)
+(def! $ (fn* (a) (a \* 100)))
+($ 188)
+($ 10)
+'(10 \+ 10)
+'(10 \ngig 10)
+'(10 \ngig$$201 10)
+'(10 \ngig$$201' 10)
+'(10 '\ngig$$201 10)
+'\
+('\)
+('\ 19)
+(/ 19)
+/
+\
+\/
+(\/ 19)
+( 18 \/ 19)
+( 1 \/ 19)
+( 0 \/ 19)
+( 0 \/ 0)
+( 0 \/ 1)
+(29 \- 19)
+(if (10 \> 20) (println "hello!") (println "fuck you!"))
+(if (10 \< 20) (println "hello!") (println "fuck you!"))
+(if (10 \< 20) "hello!" "fuck you!")
+(println (if (10 \< 20) "hello!" "fuck you!"))
+(println (if (10 \> 20) "hello!" "fuck you!"))
+(println (if (10 \>= 20) "hello!" "fuck you!"))
+(println (if (10 \<= 20) "hello!" "fuck you!"))
+(def! x !!(if (10 \<= 20) "hello!" "fuck you!"))
 x
-(x)
-(eval x)
-@l
-l
-@l
-(def! ++ (fn* (int) (+ 1 int)) )
-(++ 2)
-(swap! l ++)
-@l
-(swap! l ++)
-(do (swap! l ++) @l)
-'()
-()
-'(30)
-(30)
-'(false true 300 199)
-(false true 300 199)
-''(false true 300 199)
-'(false true 300 199)
-'(false true 300 199)'
-'(false true 300 199)'''
-'(false true 300 199)
-(def! cond '(if true false true))
-cond
-(eval cond)
+W
+_

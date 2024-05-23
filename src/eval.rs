@@ -1,14 +1,13 @@
-use std::ops::ControlFlow;
-use std::rc::Rc;
-
-use anyhow::{anyhow, Context};
-
 use crate::env::{Env, Inner};
+use crate::expr;
 use crate::read::Closure;
 use crate::{
-    read::{Expr, QxErr, AST},
+    read::{Expr, QxErr},
     Runtime,
 };
+
+use anyhow::{anyhow, Context};
+use std::ops::ControlFlow;
 
 macro_rules! err {
     (form: $form:literal) => {
@@ -112,7 +111,7 @@ impl Runtime {
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let Expr::Sym(ref ident) = ident else {
-            return self.apply_func(Expr::List(lst.to_vec()), env);
+            return self.apply_func(Expr::List(lst.to_vec().into_boxed_slice().into()), env);
         };
 
         match (ident as &str, &lst[1..]) {
@@ -133,8 +132,8 @@ impl Runtime {
                 for pair in new_bindings.chunks_exact(2) {
                     let [Expr::Sym(ident), expr] = pair else {
                         return ControlFlow::Break(Err(QxErr::TypeErr {
-                            expected: Expr::Sym("<sym>".to_string()),
-                            found: pair[0].clone(),
+                            expected: Box::new(expr!(sym "<sym>")),
+                            found: Box::new(pair[0].clone()),
                         }));
                     };
 
@@ -150,6 +149,7 @@ impl Runtime {
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
             ("quote", [expr]) => ControlFlow::Break(Ok(expr.clone())),
+            ("quasiquote", [expr]) => ControlFlow::Break(quasiquote(expr)),
 
             // ("prn", [arg]) => {
             //     println!("{arg:?}");
@@ -175,8 +175,7 @@ impl Runtime {
                 })
             }
             // ("do", _) => err!(form: "(do <expr>*)"),
-
-            _ => self.apply_func(Expr::List(lst.to_vec()), env),
+            _ => self.apply_func(Expr::List(lst.to_vec().into_boxed_slice().into()), env),
         }
     }
 
@@ -235,7 +234,7 @@ impl Runtime {
             Err(e) => return err!(break e),
         };
 
-        match new.as_slice() {
+        match &*new {
             [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
             [Expr::Closure(Closure {
                 args_name,
@@ -271,12 +270,21 @@ impl Runtime {
                 .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
                 .context(format!("Unbound identifier [ {sym} ]"))?,
+
             Expr::List(l) => Expr::List(
-                l.into_iter()
-                    .map(|it| self.eval(it, env.clone()))
+                l.iter()
+                    .map(|it| self.eval(it.clone(), env.clone()))
                     .collect::<Result<_, _>>()?,
             ),
             val => val,
         })
     }
+}
+
+fn quasiquote(_ex: &Expr) -> Result<Expr, QxErr> {
+    Err(QxErr::Any(anyhow!("Not implemented: quasiquote")))
+
+    // if !ex.contains_sym("unquote") && !ex.contains_sym("splice-unquote") {
+    //     return Ok(ex.clone());
+    // }
 }

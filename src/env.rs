@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
+use crate::expr;
 use crate::read::{Expr, QxErr};
 
 use self::core::{builtins, cmp_ops, int_ops};
@@ -12,7 +13,6 @@ mod core;
 pub struct Inner {
     outer: Option<Env>,
     data: RefCell<HashMap<String, Expr>>,
-    // selfref: Weak<Inner>,
 }
 
 impl std::fmt::Debug for Inner {
@@ -29,11 +29,8 @@ pub struct Env(Rc<Inner>);
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        // println!(
-        //     "dropping inner TODO, {:?}, {:?}",
-        //     self.data,
-        //     self.outer.as_ref().map(|it| &it.0.data)
-        // );
+        // TODO: solve memory leak when env is created with a closure capturing the env,
+        // creating a reference cycle
     }
 }
 
@@ -46,10 +43,9 @@ fn core_map(inp: &str) -> Option<Expr> {
 impl Inner {
     #[must_use]
     pub fn new_env(outer: Option<Env>) -> Env {
-        Env(Rc::new_cyclic(|cycle| Self {
+        Env(Rc::new(Self {
             outer,
             data: RefCell::default(),
-            // selfref: cycle.clone(),
         }))
     }
 
@@ -62,13 +58,13 @@ impl Inner {
 
         if argsident.len() != args.len() {
             return Err(QxErr::TypeErr {
-                expected: Expr::List(
+                expected: Box::new(Expr::List(
                     argsident
                         .iter()
-                        .map(|it| Expr::Sym(it.as_ref().to_owned()))
-                        .collect::<Vec<_>>(),
-                ),
-                found: Expr::List(args.to_vec()),
+                        .map(|it| expr!(sym it.as_ref()))
+                        .collect::<Rc<[_]>>(),
+                )),
+                found: Box::new(Expr::List(args.into())),
             });
         }
 
@@ -93,6 +89,7 @@ impl Inner {
 }
 
 impl Env {
+    #[must_use]
     pub fn get(&self, ident: &str) -> Option<Expr> {
         self.find(ident).map_or_else(
             || core_map(ident),
@@ -104,7 +101,7 @@ impl Env {
         self.0.data.borrow_mut().insert(ident.to_owned(), val);
     }
 
-    pub fn find(&self, ident: &str) -> Option<Env> {
+    #[must_use] pub fn find(&self, ident: &str) -> Option<Self> {
         // check if self contains the key,
         self.0
             .data

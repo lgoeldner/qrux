@@ -4,9 +4,7 @@
 
 use std::{path::PathBuf, rc::Rc};
 
-use reedline::{
-    DefaultCompleter, DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline,
-};
+use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::{Env, Inner};
 use read::{Expr, QxErr};
@@ -78,7 +76,7 @@ impl Runtime {
         s
     }
 
-    pub fn read_from_stdin(&mut self) -> Result<read::AST, read::QxErr> {
+    pub fn read_from_stdin(&mut self) -> Result<Expr, read::QxErr> {
         read::read_stdin(self)
     }
 

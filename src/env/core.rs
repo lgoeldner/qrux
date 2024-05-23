@@ -1,13 +1,11 @@
 use std::backtrace::Backtrace;
-use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::rc::Rc;
 
 use anyhow::Context;
 
-use crate::lazy::Lazy;
 use crate::read::Expr;
-use crate::{read, Func, QxErr};
+use crate::{expr, read, Func, QxErr};
 
 #[macro_export]
 macro_rules! func_expr {
@@ -83,6 +81,7 @@ pub fn int_ops(ident: &str) -> Option<Expr> {
 							let Expr::Int(init) = args[0] else {
 								return Err(QxErr::NoArgs(Some(args.to_vec())));
 							};
+
 							args.iter().skip(1)
 								.try_fold(init, |acc, it| {
 									if let Expr::Int(it) = it {
@@ -106,7 +105,7 @@ use std::fmt::Write;
 pub fn builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
         "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
-        "list" => func_expr! { it in Expr::List(it.to_vec()) },
+        "list" => func_expr! { it in Expr::List(it.iter().cloned().collect()) },
         "list?" => func_expr! {
             [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_)))
         },
@@ -150,6 +149,25 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                 println!("{}", Backtrace::force_capture()); Expr::Nil
             }
         },
+        "concat" => func_expr! {
+            variadic in {
+                let mut res = vec![];
+                for it in variadic {
+                    if let Expr::List(l) = it {
+                        res.extend_from_slice(l);
+                    } else {
+                        return Err(QxErr::TypeErr { expected: Box::new(expr!(list)), found: Box::new(it.clone()) });
+                    }
+                }
+
+                Expr::List(res.into_boxed_slice().into())
+            }
+        },
+        "cons" => func_expr! { [prepend, Expr::List(to)] => {
+            let mut res = vec![prepend.clone()];
+            res.extend_from_slice(to);
+            Expr::List(res.into_boxed_slice().into())
+        }},
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
         "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },
         "atom?" => func_expr!([expr] => Expr::Bool(matches!(expr, Expr::Atom(_)))),
@@ -160,9 +178,9 @@ pub fn builtins(ident: &str) -> Option<Expr> {
 
             expr.append(&mut args.to_vec());
 
-            let res = ctx.eval(Expr::List(expr), None)?;
+            let res = ctx.eval(Expr::List(expr.into()), None)?;
 
-			*RefCell::borrow_mut(atom) = res.clone();
+            *RefCell::borrow_mut(atom) = res.clone();
 
             res
         } },

@@ -1,114 +1,22 @@
-// #![warn(clippy::pedantic, clippy::nursery)]
 
-use std::{
-    borrow::Borrow,
-    cell::RefCell,
-    default,
-    rc::{Rc, Weak},
-    vec,
-};
+pub use types::*;
 
 use anyhow::{anyhow, Context};
 use reedline::Signal;
 use regex::Regex;
-use thiserror::Error;
 
-use crate::{
-    env::{Env, Inner},
-    lazy::Lazy,
-    Func, Runtime, Term,
-};
+use crate::{expr, lazy::Lazy, Runtime, Term};
 
 use self::stream::TokenStream;
 
 mod stream;
 
-#[derive(Clone, Eq, PartialEq, Default)]
-pub enum Expr {
-    Atom(Rc<RefCell<Expr>>),
-    Closure(Closure),
-    Func(Func),
-    Int(i64),
-    String(String),
-    Sym(String),
-    List(Vec<Expr>),
-    Bool(bool),
-    #[default]
-    Nil,
-}
-
-#[derive(Error, Debug)]
-pub enum QxErr {
-    #[error("Interrupted, Stop")]
-    Stop,
-    #[error("Fatal Error: {0}")]
-    Fatal(#[from] Box<QxErr>),
-    #[error(transparent)]
-    Any(#[from] anyhow::Error),
-
-    #[error("Mismatched Paren {0}")]
-    MismatchedParen(ParenType),
-
-    #[error("Missing Token: {0}")]
-    MissingToken(anyhow::Error),
-
-    #[error("Wrong / Missing argument, received: {0:?}")]
-    NoArgs(Option<Vec<Expr>>),
-
-    #[error("Type error, expected: {expected:?}, found: {found:?}")]
-    TypeErr { expected: Expr, found: Expr },
-}
-
-#[derive(Debug, Clone)]
-pub enum ParenType {
-    Open,
-    Close,
-}
-
-impl std::fmt::Display for ParenType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Open => write!(f, "("),
-            Self::Close => write!(f, ")"),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct Closure {
-    pub args_name: Vec<String>,
-    pub body: Box<Expr>,
-    pub captured: Env,
-}
-
-impl Eq for Closure {}
-impl PartialEq for Closure {
-    fn eq(&self, _: &Self) -> bool {
-        false
-    }
-}
-
-impl Closure {
-    pub fn new(args_name: Vec<String>, body: Expr, captured: Env) -> Self {
-        Self {
-            args_name,
-            body: Box::new(body),
-            captured,
-        }
-    }
-}
-
-impl std::fmt::Debug for Expr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self}")
-    }
-}
-
-type PResult<T> = Result<T, QxErr>;
+pub mod expr_macro;
+pub mod types;
 
 pub fn tokenize(input: &str) -> TokenStream {
     static RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r#"[\s,]*((!!)|~@|[\[\]{}()'`~^@]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#)
+        Regex::new(r#"[\s,]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#)
             .unwrap()
     });
 
@@ -126,7 +34,7 @@ fn get_inp(ctx: &mut Term) -> PResult<String> {
     }
 }
 
-pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<AST> {
+pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<Expr> {
     Input::get(runtime.term())?.tokenize().try_into()
 }
 
@@ -145,52 +53,27 @@ impl core::str::FromStr for Expr {
     }
 }
 
-pub struct Input(pub String);
-impl Input {
-    pub fn get(ctx: &mut Term) -> PResult<Self> {
-        Ok(Self(get_inp(ctx)?))
-    }
-
-    pub fn tokenize(&self) -> TokenStream {
-        tokenize(&self.0)
-    }
-}
-
-pub type AST = Expr;
-
-fn parse(mut tokens: TokenStream) -> Result<AST, QxErr> {
-    // let mut ast = vec![];
-
-    // while tokens.peek().is_some() {
-    //     let t = parse_atom(&mut tokens)?;
-
-    //     ast.push(t);
-    // }
-    let ast = parse_atom(&mut tokens)?;
-    // match ast.as_slice() {
-    //     [Expr::List(_)] => Ok(ast.swap_remove(0)),
-
-    //     _ => Ok(Expr::List(ast)),
-    // }
-
-    Ok(ast)
+fn parse(mut tokens: TokenStream) -> Result<Expr, QxErr> {
+    parse_atom(&mut tokens)
 }
 
 fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
-    let raw_token = stream.next().context("Missing token")?;
+    let raw_token = stream.next().context("Didnt expect EOF")?;
 
     Ok(match raw_token {
         "(" => parse_list(stream)?,
+        // if this is encountered, it's a syntax error,
+        // because it should be consumed in `parse_list` (above)
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
         // reader macros //
-        "'" => Expr::List(vec![Expr::Sym("quote".into()), parse_atom(stream)?]),
-        "@" => Expr::List(vec![Expr::Sym("deref".into()), parse_atom(stream)?]),
-        "!!" => Expr::List(vec![Expr::Sym("atom".into()), parse_atom(stream)?]),
+        "'" => expr!(list expr!(quote), parse_atom(stream)?),
+        "@" => expr!(list expr!(deref), parse_atom(stream)?),
+        "!!" => expr!(list expr!(atom), parse_atom(stream)?),
         //--//
-        "nil" => Expr::Nil,
-        "true" => Expr::Bool(true),
-        "false" => Expr::Bool(false),
+        "nil" => expr!(nil),
+        "true" => expr!(bool true),
+        "false" => expr!(bool false),
 
         int if int.parse::<i64>().is_ok() => {
             Expr::Int(
@@ -210,7 +93,8 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
                 })?,
             )
         }
-        sym => Expr::Sym(sym.to_string()),
+        sym => expr!(sym sym),
+        // sym => Expr::Sym(sym.to_string()),
     })
 }
 
@@ -223,8 +107,29 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
             break;
         }
 
+        // infix operator, swaps the order of the next two 
+        // expressions to allow things like (10 \+ 10)
+        // more readable than (+ 10 10)
+        if stream.peek() == Some("\\") {
+            stream.next();
+            let op = parse_atom(stream)?;
+
+            list.push(op);
+
+            let len = list.len();
+
+            if len < 2 {
+                return Err(QxErr::Any(anyhow!("Invalid infix operator use!")));
+            }
+
+            list.swap(len - 1, len - 2);
+
+            // list.insert(list.len() - 2, next);
+            continue;
+        }
+
         list.push(parse_atom(stream)?);
     }
 
-    Ok(Expr::List(list))
+    Ok(Expr::List(list.into_boxed_slice().into()))
 }
