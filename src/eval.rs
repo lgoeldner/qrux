@@ -52,28 +52,6 @@ macro_rules! early_ret {
     };
 }
 
-// macro_rules! special {
-// 	(  match $fn:ident, $lst:ident { $($name:literal: $p:pat, args: $form:literal => $exp:expr),+ }) => {
-
-// 		match ($fn, &$lst[1..]) {
-
-// 			$(
-// 				($name, $p) => $exp,
-// 				($name, _) => err!(form: $form),
-
-// 				_ => Ok(None)
-// 			)+
-
-// 		}
-
-// 	};
-// }
-// return special! {
-// 	match ident, lst {
-//     	"def!": [Expr::Sym(ident), expr], args: "<sym> <expr>" => self.defenv(ident, expr).map(Some)
-// 	}
-// };
-
 #[derive(Debug)]
 struct EvalTco {
     ast: Expr,
@@ -86,7 +64,11 @@ impl Runtime {
             return match ast {
                 Expr::List(ref empty) if empty.is_empty() => Ok(ast.clone()),
 
-                Expr::List(list) => {
+                Expr::List(ref list) => {
+                    let list = list.clone();
+
+                    ast = self.macroexpand(ast, env.clone())?;
+
                     let ident = list.first().ok_or(QxErr::NoArgs(None))?;
 
                     match self.apply(ident, &list, env.clone()) {
@@ -122,7 +104,20 @@ impl Runtime {
             ("def!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             ("def!", _) => err!(form: "(def! <sym> <expr>)"),
 
-            ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body),
+            ("defmacro!", [Expr::Sym(ident), Expr::List(args), body]) => {
+                let closure = self.create_closure(&env, args, body, true);
+                match closure {
+                    ControlFlow::Break(Ok(Expr::Closure(cl))) => {
+                        self.env.set(ident, Expr::Closure(cl));
+                        ret_ok!(expr!(nil))
+                    }
+
+                    _ => todo!(),
+                }
+            }
+            ("defmacro!", _) => err!(form: "(defmacro! <name> <args> <body>)"),
+
+            ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body, false),
             ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
 
             ("if", [cond, then, ..]) => self.eval_if(lst, env, cond, then),
@@ -211,6 +206,7 @@ impl Runtime {
         env: &Option<Env>,
         args: &[Expr],
         body: &Expr,
+        is_macro: bool,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let x = args.iter().map(|it| {
             if let Expr::Sym(s) = it {
@@ -247,6 +243,7 @@ impl Runtime {
                     args_name,
                     captured,
                     body,
+                    ..
                 } = cl.as_ref();
 
                 let new_env = Inner::with_outer_args(captured.clone(), args, args_name);
@@ -287,6 +284,32 @@ impl Runtime {
             ),
             val => val,
         })
+    }
+
+    /// true, if the ast is a list whose fist element is a macro in the environment
+    fn is_macro_call(&mut self, ast: &Expr, env: &Option<Env>) -> Option<Rc<Closure>> {
+        if let Expr::List(lst) = ast {
+            if let [Expr::Sym(sym), ..] = &**lst {
+                if let Some(Expr::Closure(cl)) = env.as_ref().unwrap_or_else(|| &self.env).get(sym)
+                {
+                    cl.is_macro.then_some(cl)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    fn macroexpand(&mut self, mut ast: Expr, env: Option<Env>) -> Result<Expr, QxErr> {
+        while let Some(cl) =  self.is_macro_call(&ast, &env) {
+            todo!()
+        }
+
+        Ok(ast)
     }
 }
 

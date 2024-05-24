@@ -7,10 +7,10 @@ use anyhow::Context;
 use crate::read::Expr;
 use crate::{expr, read, Func, QxErr};
 
-#[macro_export]
 macro_rules! func_expr {
+    // handles argument matching and returning
     ($args_pat:pat => $exp:expr) => {
-        Func::new_expr(|_ctx, args| {
+        Func::new_expr(|_, args| {
             if let $args_pat = args {
                 Ok($exp)
             } else {
@@ -19,6 +19,7 @@ macro_rules! func_expr {
         })
     };
 
+    // bind context
     (ctx: $ident:ident; $args_pat:pat => $exp:expr) => {
         Func::new_expr(|$ident, args| {
             if let $args_pat = args {
@@ -29,17 +30,8 @@ macro_rules! func_expr {
         })
     };
 
-    (move ctx: $ident:ident; $args_pat:pat => $exp:expr) => {
-        Func::new_expr(move |$ident, args| {
-            if let $args_pat = args {
-                Ok($exp)
-            } else {
-                Err(QxErr::NoArgs(Some(args.to_vec())))
-            }
-        })
-    };
 
-    // irrefutable patterns
+    // irrefutable pattern
     ( $irref:pat in $expr:expr) => {
         Func::new_expr(|_ctx, args| {
             let $irref = args;
@@ -47,14 +39,6 @@ macro_rules! func_expr {
         })
     };
 
-    // side effects only
-    ( $irref:pat in $expr:expr; Nil) => {
-        Func::new_expr(|_ctx, args| {
-            let $irref = args;
-            let _ = $expr;
-            Ok(Expr::Nil)
-        })
-    };
 }
 
 pub fn cmp_ops(ident: &str) -> Option<Expr> {
@@ -78,12 +62,12 @@ pub fn int_ops(ident: &str) -> Option<Expr> {
 				Some(match ident {
 					$(
 						stringify!($op) => Func::new_expr(|_ctx, args: &[Expr]| {
-							let Expr::Int(init) = args[0] else {
+							let [Expr::Int(init), ..] = args else {
 								return Err(QxErr::NoArgs(Some(args.to_vec())));
 							};
 
 							args.iter().skip(1)
-								.try_fold(init, |acc, it| {
+								.try_fold(*init, |acc, it| {
 									if let Expr::Int(it) = it {
 										Ok(acc $op it)
 									} else {
@@ -161,13 +145,13 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                     }
                 }
 
-                Expr::List(res.into_boxed_slice().into())
+                Expr::List(res.into())
             }
         },
         "cons" => func_expr! { [prepend, Expr::List(to)] => {
             let mut res = vec![prepend.clone()];
             res.extend_from_slice(to);
-            Expr::List(res.into_boxed_slice().into())
+            Expr::List(res.into())
         }},
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
         "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },

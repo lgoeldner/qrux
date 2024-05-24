@@ -49,11 +49,7 @@ impl Inner {
         }))
     }
 
-    pub fn with_outer_args(
-        outer: Env,
-        args: &[Expr],
-        argsident: &[Rc<str>],
-    ) -> Result<Env, QxErr> {
+    pub fn with_outer_args(outer: Env, args: &[Expr], argsident: &[Rc<str>]) -> Result<Env, QxErr> {
         let env = Self::with_outer(outer);
 
         if argsident.len() != args.len() {
@@ -69,10 +65,7 @@ impl Inner {
         }
 
         for (arg, ident) in args.iter().zip(argsident) {
-            env.0
-                .data
-                .borrow_mut()
-                .insert(ident.clone(), arg.clone());
+            env.0.data.borrow_mut().insert(ident.clone(), arg.clone());
         }
 
         Ok(env)
@@ -89,6 +82,10 @@ impl Inner {
 }
 
 impl Env {
+    pub fn remove(&self, ident: &str) -> Option<Expr> {
+        self.0.data.borrow_mut().remove(ident)
+    }
+
     #[must_use]
     pub fn get(&self, ident: &str) -> Option<Expr> {
         self.find(ident).map_or_else(

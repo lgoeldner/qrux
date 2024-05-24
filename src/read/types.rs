@@ -73,9 +73,10 @@ impl std::fmt::Display for ParenType {
 
 #[derive(Clone, Debug)]
 pub struct Closure {
-    pub args_name: Vec<Rc<str>>,
+    pub args_name: Box<[Rc<str>]>,
     pub body: Box<Expr>,
     pub captured: Env,
+    pub is_macro: bool,
 }
 
 impl Eq for Closure {}
@@ -89,9 +90,20 @@ impl Closure {
     #[must_use]
     pub fn new(args_name: Vec<Rc<str>>, body: Expr, captured: Env) -> Self {
         Self {
-            args_name,
+            args_name: args_name.into(),
             body: Box::new(body),
             captured,
+            is_macro: false,
+        }
+    }
+
+    #[must_use]
+    pub fn new_macro(args_name: Vec<Rc<str>>, body: Expr, captured: Env) -> Self {
+        Self {
+            args_name: args_name.into(),
+            body: Box::new(body),
+            captured,
+            is_macro: true,
         }
     }
 }
