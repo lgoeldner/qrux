@@ -126,6 +126,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                             .map(|()| acc)
                         })
                         .map_err(|it| QxErr::Any(it.into()))?
+                        .into_boxed_str().into()
                 )
         },
 
@@ -134,7 +135,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         }
         "slurp" => func_expr! { [Expr::String(s)] => {
                  Expr::String(
-                    std::fs::read_to_string(s).map_err(|err| QxErr::Any(err.into()))?
+                    std::fs::read_to_string(s as &str).map_err(|err| QxErr::Any(err.into()))?.into()
                 )
             }
         },

@@ -8,8 +8,12 @@ use crate::{
 
 use anyhow::{anyhow, Context};
 use std::ops::ControlFlow;
+use std::rc::Rc;
 
+// helper for error because we can't use `?`
+// due to ControlFlow for TCO
 macro_rules! err {
+    // for special form args errors
     (form: $form:literal) => {
         return ControlFlow::Break(Err(QxErr::Any(anyhow!(concat!("Correct Form: ", $form)))))
     };
@@ -149,13 +153,15 @@ impl Runtime {
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
             ("quote", [expr]) => ControlFlow::Break(Ok(expr.clone())),
-            ("quasiquote", [expr]) => ControlFlow::Break(quasiquote(expr)),
+            ("quote", _) => err!(form: "(quote <expr>)"),
 
-            // ("prn", [arg]) => {
-            //     println!("{arg:?}");
-            //     ret_ok!(Expr::Nil)
-            // }
-            // ("prn", _) => err!(form: "(prn <expr>)"),
+            ("quasiquote", [expr]) => ControlFlow::Continue(EvalTco {
+                ast: quasiquote(expr),
+                env,
+            }),
+            ("qqex", [expr]) => ControlFlow::Break(Ok(quasiquote(expr))),
+            ("quasiquote", _) => err!(form: "(quasiquote <expr>)"),
+
             ("do", exprs) => {
                 let last_expr = match exprs.last() {
                     None => err!(form: "(do <expr>*)"),
@@ -220,7 +226,7 @@ impl Runtime {
             env.as_ref().unwrap_or(&self.env).clone(),
         );
 
-        ret_ok!(Expr::Closure(cl))
+        ret_ok!(Expr::Closure(Rc::new(cl)))
     }
 
     fn apply_func(
@@ -236,11 +242,13 @@ impl Runtime {
 
         match &*new {
             [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
-            [Expr::Closure(Closure {
-                args_name,
-                captured,
-                body,
-            }), args @ ..] => {
+            [Expr::Closure(cl), args @ ..] => {
+                let Closure {
+                    args_name,
+                    captured,
+                    body,
+                } = cl.as_ref();
+
                 let new_env = Inner::with_outer_args(captured.clone(), args, args_name);
 
                 ControlFlow::Continue(EvalTco {
@@ -254,7 +262,7 @@ impl Runtime {
         }
     }
 
-    fn defenv(&mut self, ident: &str, expr: &Expr, env: Option<Env>) -> Result<Expr, QxErr> {
+    fn defenv(&mut self, ident: &Rc<str>, expr: &Expr, env: Option<Env>) -> Result<Expr, QxErr> {
         let res = self.eval(expr.clone(), env)?;
         self.env.set(ident, res);
 
@@ -269,6 +277,7 @@ impl Runtime {
             Expr::Sym(sym) => env
                 .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
+                .or_else(|| is_special_form(&sym).then_some(expr!(sym sym.clone())))
                 .context(format!("Unbound identifier [ {sym} ]"))?,
 
             Expr::List(l) => Expr::List(
@@ -281,10 +290,51 @@ impl Runtime {
     }
 }
 
-fn quasiquote(_ex: &Expr) -> Result<Expr, QxErr> {
-    Err(QxErr::Any(anyhow!("Not implemented: quasiquote")))
+fn is_special_form(sym: &str) -> bool {
+    matches!(
+        sym,
+        "def!"
+            | "fn*"
+            | "if"
+            | "let*"
+            | "do"
+            | "quote"
+            | "quasiquote"
+            | "unquote"
+            | "splice-unquote"
+    )
+}
 
-    // if !ex.contains_sym("unquote") && !ex.contains_sym("splice-unquote") {
-    //     return Ok(ex.clone());
-    // }
+fn qq_list(elts: &[Expr]) -> Expr {
+    let mut acc = vec![];
+    for elt in elts.iter().rev() {
+        if let Expr::List(v) = elt {
+            if v.len() == 2 {
+                if let Expr::Sym(ref s) = v[0] {
+                    if &**s == "splice-unquote" {
+                        acc = vec![expr!(concat), v[1].clone(), Expr::List(acc.into())];
+                        continue;
+                    }
+                }
+            }
+        }
+        acc = vec![expr!(cons), quasiquote(elt), Expr::List(acc.into())];
+    }
+    Expr::List(acc.into())
+}
+
+fn quasiquote(ast: &Expr) -> Expr {
+    match ast {
+        Expr::List(v) => {
+            if v.len() == 2 {
+                if let Expr::Sym(ref s) = v[0] {
+                    if &**s == "unquote" {
+                        return v[1].clone();
+                    }
+                }
+            }
+            qq_list(v)
+        }
+        _ => ast.clone(),
+    }
 }

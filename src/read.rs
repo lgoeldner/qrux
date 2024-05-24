@@ -1,4 +1,3 @@
-
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -15,9 +14,21 @@ pub mod expr_macro;
 pub mod types;
 
 pub fn tokenize(input: &str) -> TokenStream {
+    /// Split input into tokens
+    /// for reader macros:
+    ///   - !! : creates an atom
+    ///   - @ : dereference an atom
+    ///   - \ : do infix notation, similar to haskell, see `parse_list`
+    ///   - ' : quote
+    ///   - ` : quasiquoting:
+    ///     - ~ : splice-unquote
+    ///     - , : unquote
     static RE: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r#"[\s,]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#)
-            .unwrap()
+        // old: [\s,]*((!!)|,|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)
+        Regex::new(
+            r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|,|[^\s\[\]{}('"`,;)]*)"#,
+        )
+        .unwrap()
     });
 
     RE.find_iter(input)
@@ -49,7 +60,9 @@ impl core::str::FromStr for Expr {
     type Err = QxErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Input(s.to_owned()).tokenize().try_into()
+        Input(std::convert::Into::<Box<str>>::into(s).into())
+            .tokenize()
+            .try_into()
     }
 }
 
@@ -70,6 +83,11 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         "'" => expr!(list expr!(quote), parse_atom(stream)?),
         "@" => expr!(list expr!(deref), parse_atom(stream)?),
         "!!" => expr!(list expr!(atom), parse_atom(stream)?),
+
+        // quasiquoting
+        "`" => expr!(list expr!(quasiquote), parse_atom(stream)?),
+        "~" => expr!(list expr!(sym "splice-unquote"), parse_atom(stream)?),
+        "," => expr!(list expr!(unquote), parse_atom(stream)?),
         //--//
         "nil" => expr!(nil),
         "true" => expr!(bool true),
@@ -88,9 +106,11 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
             }
 
             Expr::String(
-                unescaper::unescape(&string[1..string.len() - 1]).map_err(|err| {
-                    QxErr::Any(anyhow!("Failed to unescape string: {string:?}, Err: {err}"))
-                })?,
+                unescaper::unescape(&string[1..string.len() - 1])
+                    .map_err(|err| {
+                        QxErr::Any(anyhow!("Failed to unescape string: {string:?}, Err: {err}"))
+                    })?
+                    .into(),
             )
         }
         sym => expr!(sym sym),
@@ -107,7 +127,7 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
             break;
         }
 
-        // infix operator, swaps the order of the next two 
+        // infix operator, swaps the order of the last and next expressions
         // expressions to allow things like (10 \+ 10)
         // more readable than (+ 10 10)
         if stream.peek() == Some("\\") {

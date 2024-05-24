@@ -11,7 +11,7 @@ impl std::fmt::Display for Expr {
             write!(f, "(")?;
 
             list.iter()
-                .map(|it| format!("{it}"))
+                .map(ToString::to_string)
                 .collect::<Vec<_>>()
                 .join(" ")
                 .fmt(f)?;

@@ -12,7 +12,7 @@ mod core;
 #[derive(Clone, Default)]
 pub struct Inner {
     outer: Option<Env>,
-    data: RefCell<HashMap<String, Expr>>,
+    data: RefCell<HashMap<Rc<str>, Expr>>,
 }
 
 impl std::fmt::Debug for Inner {
@@ -52,7 +52,7 @@ impl Inner {
     pub fn with_outer_args(
         outer: Env,
         args: &[Expr],
-        argsident: &[impl AsRef<str>],
+        argsident: &[Rc<str>],
     ) -> Result<Env, QxErr> {
         let env = Self::with_outer(outer);
 
@@ -72,7 +72,7 @@ impl Inner {
             env.0
                 .data
                 .borrow_mut()
-                .insert(ident.as_ref().to_string(), arg.clone());
+                .insert(ident.clone(), arg.clone());
         }
 
         Ok(env)
@@ -97,11 +97,12 @@ impl Env {
         )
     }
 
-    pub fn set(&self, ident: &str, val: Expr) {
-        self.0.data.borrow_mut().insert(ident.to_owned(), val);
+    pub fn set(&self, ident: &Rc<str>, val: Expr) {
+        self.0.data.borrow_mut().insert(Rc::clone(ident), val);
     }
 
-    #[must_use] pub fn find(&self, ident: &str) -> Option<Self> {
+    #[must_use]
+    pub fn find(&self, ident: &str) -> Option<Self> {
         // check if self contains the key,
         self.0
             .data
