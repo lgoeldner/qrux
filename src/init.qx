@@ -2,7 +2,7 @@
 
 
 (defmacro! defun! (ident args body)
-	`(def! ,ident (fn* ,args ,body)))
+	`(val! ,ident (fn* ,args ,body)))
 
 (defmacro! when (cond &body)
 	`(if ,cond (do ~body)))
@@ -17,13 +17,18 @@
 	(eval
 		(read-string str)))
 
+; load a file and execute it with a do block wrapped around
 (defun! loadf (path)
 	(rep
-		(str "(do"
-			(slurp path) ")")))
+		(str "(do" (slurp path) "(println \"done!\"))" )))
 
-;(defun! re (string)
-;		(eval
-;			(read-string string)))
+; returns a curried function
+; swaps the order of two arguments
+(defun! swap (func) (fn* (a b) (func b a)))
+
+
+(defun! append (el to)
+	(concat to (list el)))
+
 
 )

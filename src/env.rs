@@ -5,7 +5,7 @@ use std::rc::Rc;
 use crate::expr;
 use crate::read::{Expr, QxErr};
 
-use self::core::{builtins, cmp_ops, int_ops};
+use self::core::{builtins, cmp_ops, int_ops, list_builtins};
 
 mod core;
 
@@ -35,9 +35,10 @@ impl Drop for Inner {
 }
 
 fn core_map(inp: &str) -> Option<Expr> {
-    int_ops(inp)
+    builtins(inp)
         .or_else(|| cmp_ops(inp))
-        .or_else(|| builtins(inp))
+        .or_else(|| int_ops(inp))
+        .or_else(|| list_builtins(inp))
 }
 
 impl Inner {
@@ -72,10 +73,7 @@ impl Inner {
 
         if matches!(argsident.last(), Some(s) if s.starts_with('&')) {
             for (arg, ident) in args[..argsident.len() - 1].iter().zip(argsident) {
-                env.0
-                    .data
-                    .borrow_mut()
-                    .insert(ident.clone(), arg.clone());
+                env.0.data.borrow_mut().insert(ident.clone(), arg.clone());
             }
 
             env.0.data.borrow_mut().insert(
