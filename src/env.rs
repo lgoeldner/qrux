@@ -102,6 +102,7 @@ impl Inner {
 }
 
 impl Env {
+    #[allow(clippy::must_use_candidate)]
     pub fn remove(&self, ident: &str) -> Option<Expr> {
         self.0.data.borrow_mut().remove(ident)
     }
