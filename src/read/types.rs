@@ -88,12 +88,12 @@ impl PartialEq for Closure {
 
 impl Closure {
     #[must_use]
-    pub fn new(args_name: Vec<Rc<str>>, body: Expr, captured: Env) -> Self {
+    pub fn new(args_name: Vec<Rc<str>>, body: Expr, captured: Env, is_macro: bool) -> Self {
         Self {
             args_name: args_name.into(),
             body: Box::new(body),
             captured,
-            is_macro: false,
+            is_macro,
         }
     }
 

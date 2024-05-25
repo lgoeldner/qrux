@@ -76,7 +76,7 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     Ok(match raw_token {
         "(" => parse_list(stream)?,
         // if this is encountered, it's a syntax error,
-        // because it should be consumed in `parse_list` (above)
+        // because it should be consumed in `parse_list`
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
         // reader macros //
@@ -89,7 +89,7 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         "~" => expr!(list expr!(sym "splice-unquote"), parse_atom(stream)?),
         "," => expr!(list expr!(unquote), parse_atom(stream)?),
         //--//
-        "nil" => expr!(nil),
+        "nil" => Expr::Nil,
         "true" => expr!(bool true),
         "false" => expr!(bool false),
 
@@ -130,7 +130,7 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         // infix operator, swaps the order of the last and next expressions
         // expressions to allow things like (10 \+ 10)
         // more readable than (+ 10 10)
-        if stream.peek() == Some("\\") {
+        if stream.peek() == Some(r"\") {
             stream.next();
             let op = parse_atom(stream)?;
 
@@ -151,5 +151,5 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         list.push(parse_atom(stream)?);
     }
 
-    Ok(Expr::List(list.into_boxed_slice().into()))
+    Ok(Expr::List(list.into()))
 }

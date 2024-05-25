@@ -1,26 +1,29 @@
 (do
 
-(def! not 
-(fn* (bool) 
+
+(defmacro! defun! (ident args body)
+	`(def! ,ident (fn* ,args ,body)))
+
+(defmacro! when (cond &body)
+	`(if ,cond (do ~body)))
+
+
+(defun! not (bool) 
 	(if bool 
 		false 
-		true)))
+		true))
 
-(def! test 
-	  true)
+(defun! rep (str)
+	(eval
+		(read-string str)))
 
-(def! loadf
-(fn* (path)
-	(eval 
-		(read-string
-			(str "(do"
-				(slurp path) ")" )))))
+(defun! loadf (path)
+	(rep
+		(str "(do"
+			(slurp path) ")")))
 
-(def! re
-	(fn* (string)
-		(eval 
-			(read-string string))))
-
-
+;(defun! re (string)
+;		(eval
+;			(read-string string)))
 
 )

@@ -49,10 +49,16 @@ impl Inner {
         }))
     }
 
-    pub fn with_outer_args(outer: Env, args: &[Expr], argsident: &[Rc<str>]) -> Result<Env, QxErr> {
+    pub fn with_fn_args(outer: Env, args: &[Expr], argsident: &[Rc<str>]) -> Result<Env, QxErr> {
         let env = Self::with_outer(outer);
 
-        if argsident.len() != args.len() {
+        if argsident.len() != args.len()
+            && (argsident
+                .last()
+                .and_then(|it| it.starts_with('&').then_some(()))
+                .is_none()
+                && argsident.len() < args.len())
+        {
             return Err(QxErr::TypeErr {
                 expected: Box::new(Expr::List(
                     argsident
@@ -64,8 +70,22 @@ impl Inner {
             });
         }
 
-        for (arg, ident) in args.iter().zip(argsident) {
-            env.0.data.borrow_mut().insert(ident.clone(), arg.clone());
+        if matches!(argsident.last(), Some(s) if s.starts_with('&')) {
+            for (arg, ident) in args[..argsident.len() - 1].iter().zip(argsident) {
+                env.0
+                    .data
+                    .borrow_mut()
+                    .insert(ident.clone(), arg.clone());
+            }
+
+            env.0.data.borrow_mut().insert(
+                argsident.last().unwrap()[1..].to_owned().into(),
+                Expr::List(args[argsident.len() - 1..].into()),
+            );
+        } else {
+            for (arg, ident) in args.iter().zip(argsident) {
+                env.0.data.borrow_mut().insert(ident.clone(), arg.clone());
+            }
         }
 
         Ok(env)

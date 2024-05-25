@@ -61,18 +61,17 @@ struct EvalTco {
 impl Runtime {
     pub fn eval(&mut self, mut ast: Expr, mut env: Option<Env>) -> Result<Expr, QxErr> {
         loop {
-            return match ast {
-                Expr::List(ref empty) if empty.is_empty() => Ok(ast.clone()),
+            ast = self.macroexpand(ast, &env)?;
+            match ast {
+                Expr::List(ref empty) if empty.is_empty() => return Ok(ast.clone()),
 
                 Expr::List(ref list) => {
                     let list = list.clone();
 
-                    ast = self.macroexpand(ast, env.clone())?;
-
                     let ident = list.first().ok_or(QxErr::NoArgs(None))?;
 
                     match self.apply(ident, &list, env.clone()) {
-                        ControlFlow::Break(res) => res,
+                        ControlFlow::Break(res) => return res,
 
                         ControlFlow::Continue(EvalTco {
                             ast: new_ast,
@@ -85,7 +84,7 @@ impl Runtime {
                     }
                 }
 
-                _ => self.replace_eval(ast.clone(), env),
+                _ => return self.replace_eval(ast, env),
             };
         }
     }
@@ -104,6 +103,11 @@ impl Runtime {
             ("def!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             ("def!", _) => err!(form: "(def! <sym> <expr>)"),
 
+            ("def?", [Expr::Sym(s)]) => ControlFlow::Break(Ok(env
+                .unwrap_or_else(|| self.env.clone())
+                .get(s)
+                .unwrap_or(Expr::Nil))),
+
             ("defmacro!", [Expr::Sym(ident), Expr::List(args), body]) => {
                 let closure = self.create_closure(&env, args, body, true);
                 match closure {
@@ -116,6 +120,10 @@ impl Runtime {
                 }
             }
             ("defmacro!", _) => err!(form: "(defmacro! <name> <args> <body>)"),
+
+            ("mexp", ast @ [Expr::Sym(_), ..]) => {
+                ControlFlow::Break(self.macroexpand(Expr::List(ast.into()), &env))
+            }
 
             ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body, false),
             ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
@@ -169,13 +177,11 @@ impl Runtime {
                     }
                 }
 
-                // self.eval(end.clone(), None).map(Some)
                 ControlFlow::Continue(EvalTco {
                     ast: last_expr.clone(),
                     env,
                 })
             }
-            // ("do", _) => err!(form: "(do <expr>*)"),
             _ => self.apply_func(Expr::List(lst.to_vec().into_boxed_slice().into()), env),
         }
     }
@@ -208,18 +214,19 @@ impl Runtime {
         body: &Expr,
         is_macro: bool,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let x = args.iter().map(|it| {
-            if let Expr::Sym(s) = it {
-                Ok(s.clone())
-            } else {
-                Err(QxErr::Any(anyhow!("Not a symbol: {it:?}")))
-            }
-        });
+        let args = args
+            .iter()
+            .map(|it| match it {
+                Expr::Sym(s) => Ok(Rc::clone(s)),
+                _ => Err(QxErr::Any(anyhow!("Not a symbol: {it:?}"))),
+            })
+            .collect::<Result<_, _>>();
 
         let cl = Closure::new(
-            early_ret!(x.collect::<Result<_, _>>()),
+            early_ret!(args),
             body.clone(),
             env.as_ref().unwrap_or(&self.env).clone(),
+            is_macro,
         );
 
         ret_ok!(Expr::Closure(Rc::new(cl)))
@@ -238,6 +245,8 @@ impl Runtime {
 
         match &*new {
             [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
+
+            // [Expr::Closure(cl), ..] if cl.is_macro => unreachable!("unexpanded macro found {cl:?}"),
             [Expr::Closure(cl), args @ ..] => {
                 let Closure {
                     args_name,
@@ -246,7 +255,7 @@ impl Runtime {
                     ..
                 } = cl.as_ref();
 
-                let new_env = Inner::with_outer_args(captured.clone(), args, args_name);
+                let new_env = Inner::with_fn_args(captured.clone(), args, args_name);
 
                 ControlFlow::Continue(EvalTco {
                     ast: *body.clone(),
@@ -286,15 +295,18 @@ impl Runtime {
         })
     }
 
-    /// true, if the ast is a list whose fist element is a macro in the environment
-    fn is_macro_call(&mut self, ast: &Expr, env: &Option<Env>) -> Option<Rc<Closure>> {
+    /// Returns the macro and args to it,
+    /// if the AST is a list, whose first element is a macro in the environment
+    fn is_macro_call<'a>(
+        &mut self,
+        ast: &'a Expr,
+        env: &Option<Env>,
+    ) -> Option<(Rc<Closure>, &'a [Expr])> {
         if let Expr::List(lst) = ast {
             if let [Expr::Sym(sym), ..] = &**lst {
-                if let Some(Expr::Closure(cl)) = env.as_ref().unwrap_or_else(|| &self.env).get(sym)
-                {
-                    cl.is_macro.then_some(cl)
-                } else {
-                    None
+                match env.as_ref().unwrap_or(&self.env).get(sym) {
+                    Some(Expr::Closure(cl)) => cl.is_macro.then_some((cl, &lst[1..])),
+                    _ => None,
                 }
             } else {
                 None
@@ -304,9 +316,12 @@ impl Runtime {
         }
     }
 
-    fn macroexpand(&mut self, mut ast: Expr, env: Option<Env>) -> Result<Expr, QxErr> {
-        while let Some(cl) =  self.is_macro_call(&ast, &env) {
-            todo!()
+    fn macroexpand(&mut self, mut ast: Expr, env: &Option<Env>) -> Result<Expr, QxErr> {
+        while let Some((macro_cl, args)) = self.is_macro_call(&ast, env) {
+            let new_env =
+                Inner::with_fn_args(macro_cl.captured.clone(), args, &macro_cl.args_name)?;
+
+            ast = self.eval(*macro_cl.body.clone(), Some(new_env))?;
         }
 
         Ok(ast)
@@ -325,6 +340,7 @@ fn is_special_form(sym: &str) -> bool {
             | "quasiquote"
             | "unquote"
             | "splice-unquote"
+            | "defmacro!"
     )
 }
 
