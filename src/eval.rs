@@ -70,7 +70,7 @@ impl Runtime {
 
                     let ident = list.first().ok_or(QxErr::NoArgs(None))?;
 
-                    match self.apply(ident, &list, env.clone()) {
+                    match self.apply(ident, list.clone(), env.clone()) {
                         ControlFlow::Break(res) => return res,
 
                         ControlFlow::Continue(EvalTco {
@@ -92,16 +92,16 @@ impl Runtime {
     fn apply(
         &mut self,
         ident: &Expr,
-        lst: &[Expr],
+        lst: Rc<[Expr]>,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let Expr::Sym(ref ident) = ident else {
-            return self.apply_func(Expr::List(lst.to_vec().into_boxed_slice().into()), env);
+            return self.apply_func(Expr::List(lst), env);
         };
 
         match (ident as &str, &lst[1..]) {
-            ("def!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
-            ("def!", _) => err!(form: "(def! <sym> <expr>)"),
+            ("val!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
+            ("val!", _) => err!(form: "(val! <sym> <expr>)"),
 
             ("def?", [Expr::Sym(s)]) => ControlFlow::Break(Ok(env
                 .unwrap_or_else(|| self.env.clone())
@@ -128,7 +128,7 @@ impl Runtime {
             ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body, false),
             ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
 
-            ("if", [cond, then, ..]) => self.eval_if(lst, env, cond, then),
+            ("if", [cond, then, ..]) => self.eval_if(&lst, env, cond, then),
             ("if", _) => err!(form: "(if <condition> <then> ?<else>)"),
 
             ("let*", [Expr::List(new_bindings), to_eval]) => {
@@ -331,7 +331,7 @@ impl Runtime {
 fn is_special_form(sym: &str) -> bool {
     matches!(
         sym,
-        "def!"
+        "val!"
             | "fn*"
             | "if"
             | "let*"

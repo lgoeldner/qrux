@@ -30,7 +30,6 @@ macro_rules! func_expr {
         })
     };
 
-
     // irrefutable pattern
     ( $irref:pat in $expr:expr) => {
         Func::new_expr(|_ctx, args| {
@@ -38,7 +37,6 @@ macro_rules! func_expr {
             Ok($expr)
         })
     };
-
 }
 
 pub fn cmp_ops(ident: &str) -> Option<Expr> {
@@ -86,9 +84,8 @@ pub fn int_ops(ident: &str) -> Option<Expr> {
 
 use std::fmt::Write;
 
-pub fn builtins(ident: &str) -> Option<Expr> {
+pub fn list_builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
-        "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
         "list" => func_expr! { it in Expr::List(it.iter().cloned().collect()) },
         "list?" => func_expr! {
             [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_)))
@@ -99,6 +96,37 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                 [Expr::List(l)] => Expr::Int( l.len().try_into().context("Integer Overflow")? )
             }
         }
+        "concat" => func_expr! {
+            variadic in {
+                let mut res = vec![];
+                for it in variadic {
+                    if let Expr::List(l) = it {
+                        res.extend_from_slice(l);
+                    } else {
+                        return Err(QxErr::TypeErr { expected: Box::new(expr!(List)), found: Box::new(it.clone()) });
+                    }
+                }
+
+                Expr::List(res.into())
+            }
+        },
+        "cons" => func_expr! { [prepend, Expr::List(to)] => {
+            let mut res = vec![prepend.clone()];
+            res.extend_from_slice(to);
+            Expr::List(res.into())
+        }},
+        "head" => func_expr! { [Expr::List(it)] => it.first().cloned().unwrap_or(Expr::Nil) },
+        "tail" => func_expr! {[Expr::List(it)] => {
+            if it.len() > 1 { Expr::List(it[1..].into()) } 
+			else { Expr::Nil }
+        } },
+        _ => None?,
+    })
+}
+
+pub fn builtins(ident: &str) -> Option<Expr> {
+    Some(match ident {
+        "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
         "println" => func_expr! {[expr] => { println!("{expr:#}"); Expr::Nil }},
         "prn" => func_expr! {[expr] => { println!("{expr}"); Expr::Nil }},
         "str" => func_expr! {
@@ -134,25 +162,6 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                 println!("{}", Backtrace::force_capture()); Expr::Nil
             }
         },
-        "concat" => func_expr! {
-            variadic in {
-                let mut res = vec![];
-                for it in variadic {
-                    if let Expr::List(l) = it {
-                        res.extend_from_slice(l);
-                    } else {
-                        return Err(QxErr::TypeErr { expected: Box::new(expr!(list)), found: Box::new(it.clone()) });
-                    }
-                }
-
-                Expr::List(res.into())
-            }
-        },
-        "cons" => func_expr! { [prepend, Expr::List(to)] => {
-            let mut res = vec![prepend.clone()];
-            res.extend_from_slice(to);
-            Expr::List(res.into())
-        }},
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
         "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },
         "atom?" => func_expr!([expr] => Expr::Bool(matches!(expr, Expr::Atom(_)))),

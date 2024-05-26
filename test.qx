@@ -1,6 +1,13 @@
 
-(def! is-tim-dumm
-	(fn* ()
-		true
-			))
+(defun! range (from to)
+	(if (from \< to)
+		(cons from (range (from \+ 1) to))
+		'()))
 
+
+(val! -> range)
+(val! <- (swap ->))
+
+
+(defun! append (el to)
+	(concat to (list el)))
