@@ -71,32 +71,9 @@ impl std::fmt::Display for ParenType {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct Closure {
-    pub args_name: Box<[Rc<str>]>,
-    pub body: Box<Expr>,
-    pub captured: Env,
-    pub is_macro: bool,
-}
 
-impl Eq for Closure {}
-impl PartialEq for Closure {
-    fn eq(&self, _: &Self) -> bool {
-        false
-    }
-}
-
-impl Closure {
-    #[must_use]
-    pub fn new(args_name: Vec<Rc<str>>, body: Expr, captured: Env, is_macro: bool) -> Self {
-        Self {
-            args_name: args_name.into(),
-            body: Box::new(body),
-            captured,
-            is_macro,
-        }
-    }
-}
+pub mod closure;
+pub use closure::Closure;
 
 impl std::fmt::Debug for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

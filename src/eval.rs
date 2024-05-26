@@ -1,5 +1,5 @@
 use crate::env::{Env, Inner};
-use crate::read::Closure;
+use crate::read::types::closure::Closure;
 use crate::{expr, Apply};
 use crate::{
     read::{Expr, QxErr},
@@ -254,22 +254,10 @@ impl Runtime {
         match &*new {
             [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
 
-            // [Expr::Closure(cl), ..] if cl.is_macro => unreachable!("unexpanded macro found {cl:?}"),
-            [Expr::Closure(cl), args @ ..] => {
-                let Closure {
-                    args_name,
-                    captured,
-                    body,
-                    ..
-                } = cl.as_ref();
-
-                let new_env = Inner::with_fn_args(captured.clone(), args, args_name);
-
-                ControlFlow::Continue(EvalTco {
-                    ast: *body.clone(),
-                    env: Some(early_ret!(new_env)),
-                })
-            }
+            [Expr::Closure(cl), args @ ..] => ControlFlow::Continue(EvalTco {
+                ast: *cl.body.clone(),
+                env: Some(early_ret!(cl.create_env(args))),
+            }),
 
             [err, ..] => err!(break "Not a Function: {err:?}"),
             [] => err!(break QxErr::NoArgs(None)),
@@ -277,8 +265,8 @@ impl Runtime {
     }
 
     fn defenv(&mut self, ident: &Rc<str>, expr: &Expr, env: Option<Env>) -> Result<Expr, QxErr> {
-        let res = self.eval(expr.clone(), env)?;
-        self.env.set(ident, res);
+        let res = self.eval(expr.clone(), env.clone())?;
+        env.as_ref().unwrap_or(&self.env).set(ident, res);
 
         Ok(Expr::Nil)
     }
@@ -326,8 +314,7 @@ impl Runtime {
 
     fn macroexpand(&mut self, mut ast: Expr, env: &Option<Env>) -> Result<Expr, QxErr> {
         while let Some((macro_cl, args)) = self.is_macro_call(&ast, env) {
-            let new_env =
-                Inner::with_fn_args(macro_cl.captured.clone(), args, &macro_cl.args_name)?;
+            let new_env = macro_cl.create_env(args)?;
 
             ast = self.eval(*macro_cl.body.clone(), Some(new_env))?;
         }

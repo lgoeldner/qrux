@@ -11,8 +11,8 @@ mod core;
 
 #[derive(Clone, Default)]
 pub struct Inner {
-    outer: Option<Env>,
-    data: RefCell<HashMap<Rc<str>, Expr>>,
+    pub(crate) outer: Option<Env>,
+    pub(crate) data: RefCell<HashMap<Rc<str>, Expr>>,
 }
 
 impl std::fmt::Debug for Inner {
@@ -50,42 +50,6 @@ impl Inner {
         }))
     }
 
-    pub fn with_fn_args(outer: Env, args: &[Expr], argsident: &[Rc<str>]) -> Result<Env, QxErr> {
-        let env = Self::with_outer(outer);
-        let has_varargs = matches!(argsident.last(), Some(s) if s.starts_with('&'));
-
-        if (!has_varargs && argsident.len() != args.len())
-            || (has_varargs && argsident.len() < args.len())
-        {
-            return Err(QxErr::TypeErr {
-                expected: Box::new(Expr::List(
-                    argsident
-                        .iter()
-                        .map(|it| expr!(sym it.as_ref()))
-                        .collect::<Rc<[_]>>(),
-                )),
-                found: Box::new(Expr::List(args.into())),
-            });
-        }
-
-        if matches!(argsident.last(), Some(s) if s.starts_with('&')) {
-            for (arg, ident) in args[..argsident.len() - 1].iter().zip(argsident) {
-                env.0.data.borrow_mut().insert(ident.clone(), arg.clone());
-            }
-
-            env.0.data.borrow_mut().insert(
-                argsident.last().unwrap()[1..].to_owned().into(),
-                Expr::List(args[argsident.len() - 1..].into()),
-            );
-        } else {
-            for (arg, ident) in args.iter().zip(argsident) {
-                env.0.data.borrow_mut().insert(ident.clone(), arg.clone());
-            }
-        }
-
-        Ok(env)
-    }
-
     #[must_use]
     pub fn with_outer(outer: Env) -> Env {
         Self::new_env(Some(outer))
@@ -97,6 +61,15 @@ impl Inner {
 }
 
 impl Env {
+    #[must_use]
+    pub fn with_outer(outer: Self) -> Self {
+        Inner::new_env(Some(outer))
+    }
+
+    pub(crate) fn inner(&self) -> Rc<Inner> {
+        self.0.clone()
+    }
+
     #[allow(clippy::must_use_candidate)]
     pub fn remove(&self, ident: &str) -> Option<Expr> {
         self.0.data.borrow_mut().remove(ident)
