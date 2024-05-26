@@ -14,7 +14,11 @@ macro_rules! func_expr {
             if let $args_pat = args {
                 Ok($exp)
             } else {
-                Err(QxErr::NoArgs(Some(args.to_vec())))
+                Err(QxErr::Any(anyhow::anyhow!(
+                    "Expected pattern {}, got: {:?}",
+                    stringify!($args_pat),
+                    args
+                )))
             }
         })
     };
@@ -117,8 +121,8 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
         }},
         "head" => func_expr! { [Expr::List(it)] => it.first().cloned().unwrap_or(Expr::Nil) },
         "tail" => func_expr! {[Expr::List(it)] => {
-            if it.len() > 1 { Expr::List(it[1..].into()) } 
-			else { Expr::Nil }
+            if it.len() > 1 { Expr::List(it[1..].into()) }
+            else { Expr::Nil }
         } },
         _ => None?,
     })
@@ -156,11 +160,6 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         },
         "*ENV*" => func_expr! {
             ctx: ctx; [] => { println!("{:#?}", ctx.env); Expr::Nil }
-        },
-        "trace" => func_expr! {
-            _ in {
-                println!("{}", Backtrace::force_capture()); Expr::Nil
-            }
         },
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
         "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },

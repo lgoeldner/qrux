@@ -1,17 +1,17 @@
 (do
 
-
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
 
 (defmacro! when (cond &body)
 	`(if ,cond (do ~body)))
 
-
-(defun! not (bool) 
-	(if bool 
-		false 
+(defun! not (bool)
+	(if bool
+		false
 		true))
+
+(val! ! not)
 
 (defun! rep (str)
 	(eval
@@ -26,9 +26,10 @@
 ; swaps the order of two arguments
 (defun! swap (func) (fn* (a b) (func b a)))
 
-
 (defun! append (el to)
 	(concat to (list el)))
 
+(defun! nil? (it)
+	(nil \= it))
 
 )

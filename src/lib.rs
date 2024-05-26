@@ -67,13 +67,18 @@ impl Runtime {
             )
             .expect("builtin prelude failed");
 
+        prototype.env.set(
+            &"*ARGS*".into(),
+            Expr::List(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
+        );
+
         prototype
     }
 
     #[must_use]
     /// # Safety
-    /// Any Code evaluated with this runtime will not 
-    /// have access to the prelude defined in the language itself
+    /// Any Code evaluated with this runtime will not
+    /// have access to the prelude.
     pub unsafe fn without_prelude(repl: Term) -> Self {
         Self {
             repl,

@@ -196,10 +196,15 @@ impl Runtime {
         let cond = early_ret!(self.eval(cond.clone(), env.clone()));
 
         match cond {
-            Expr::Bool(false) | Expr::Nil => ControlFlow::Continue(EvalTco {
-                ast: early_ret!(lst.get(3).cloned(), or QxErr::NoArgs(None)),
-                env,
-            }),
+            Expr::Bool(false) | Expr::Nil => lst.get(3).map_or_else(
+                || ControlFlow::Break(Ok(Expr::Nil)),
+                |else_branch| {
+                    ControlFlow::Continue(EvalTco {
+                        ast: else_branch.clone(),
+                        env,
+                    })
+                },
+            ),
             _ => ControlFlow::Continue(EvalTco {
                 ast: then.clone(),
                 env,
