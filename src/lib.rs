@@ -45,9 +45,7 @@ impl Func {
         self.0(ctx, args)
     }
 
-    pub fn new_expr(
-        f: fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>,
-    ) -> Expr {
+    pub fn new_expr(f: fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>) -> Expr {
         Expr::Func(Self(f))
     }
 }
@@ -55,20 +53,32 @@ impl Func {
 impl Runtime {
     #[must_use]
     pub fn new(repl: Term) -> Self {
-        let mut s = Self {
+        let mut prototype = Self {
             repl,
             env: Inner::new_env(None),
         };
 
-        s.eval(
-            include_str!("init.qx")
-                .parse()
-                .expect("builtin prelude failed"),
-            None,
-        )
-        .expect("builtin prelude failed");
+        prototype
+            .eval(
+                include_str!("init.qx")
+                    .parse()
+                    .expect("builtin prelude failed"),
+                None,
+            )
+            .expect("builtin prelude failed");
 
-        s
+        prototype
+    }
+
+    #[must_use]
+    /// # Safety
+    /// Any Code evaluated with this runtime will not 
+    /// have access to the prelude defined in the language itself
+    pub unsafe fn without_prelude(repl: Term) -> Self {
+        Self {
+            repl,
+            env: Inner::new_env(None),
+        }
     }
 
     pub fn read_from_stdin(&mut self) -> Result<Expr, read::QxErr> {
@@ -91,8 +101,20 @@ impl Term {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new() -> Self {
-        let history =
-            Box::new(FileBackedHistory::with_file(50, PathBuf::from(".qrux/history.txt")).unwrap());
+        let mut dir = directories_next::ProjectDirs::from(
+            //
+            "io",
+            "Linus Göldner",
+            "qrux",
+        )
+        .map_or_else(
+            || PathBuf::from(".qrux-history"),
+            |it| it.data_dir().to_path_buf(),
+        );
+
+        dir.push("qrux-history.txt");
+
+        let history = Box::new(FileBackedHistory::with_file(50, dir).unwrap());
 
         Self {
             prompt: DefaultPrompt {
