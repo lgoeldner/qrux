@@ -176,6 +176,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
 
             res
         } },
+		"throw" => func_expr! { [expr] => Err(QxErr::LispErr(expr.clone()))? },
         _ => None?,
     })
 }

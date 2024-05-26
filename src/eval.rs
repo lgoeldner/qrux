@@ -103,6 +103,34 @@ impl Runtime {
             ("val!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             ("val!", _) => err!(form: "(val! <sym> <expr>)"),
 
+            // form: (try* <expr> (catch* <sym> <expr>))
+            ("try*", [try_expr, Expr::List(catch)]) if matches!(&**catch, [Expr::Sym(s), Expr::Sym(_), _] if &**s == "catch") =>
+            {
+                let res = self.eval(try_expr.clone(), env.clone());
+                if let Err(e) = res {
+                    let Expr::Sym(catch_to_sym) = &catch[1] else {
+                        unreachable!()
+                    };
+
+                    let mut err_env = Env::with_outer(env.unwrap_or_else(|| self.env.clone()));
+
+                    err_env.set(
+                        catch_to_sym,
+                        match e {
+                            QxErr::LispErr(e) => e,
+                            _ => Expr::String(e.to_string().into()),
+                        },
+                    );
+
+                    ControlFlow::Continue(EvalTco {
+                        ast: catch[2].clone(),
+                        env: Some(err_env),
+                    })
+                } else {
+                    ControlFlow::Break(res)
+                }
+            }
+
             ("def?", [Expr::Sym(s)]) => env
                 .as_ref()
                 .unwrap_or(&self.env)
@@ -119,7 +147,7 @@ impl Runtime {
                         ret_ok!(expr!(nil))
                     }
 
-                    _ => todo!(),
+                    _ => unreachable!(),
                 }
             }
             ("defmacro!", _) => err!(form: "(defmacro! <name> <args> <body>)"),
@@ -137,7 +165,7 @@ impl Runtime {
             ("let*", [Expr::List(new_bindings), to_eval]) => {
                 // create new env, set as current, old env is now self.env.outer
 
-                let env = Inner::with_outer(env.unwrap_or_else(|| self.env.clone()));
+                let mut env = Inner::with_outer(env.unwrap_or_else(|| self.env.clone()));
 
                 for pair in new_bindings.chunks_exact(2) {
                     let [Expr::Sym(ident), expr] = pair else {
@@ -264,9 +292,14 @@ impl Runtime {
         }
     }
 
-    fn defenv(&mut self, ident: &Rc<str>, expr: &Expr, env: Option<Env>) -> Result<Expr, QxErr> {
+    fn defenv(
+        &mut self,
+        ident: &Rc<str>,
+        expr: &Expr,
+        mut env: Option<Env>,
+    ) -> Result<Expr, QxErr> {
         let res = self.eval(expr.clone(), env.clone())?;
-        env.as_ref().unwrap_or(&self.env).set(ident, res);
+        env.as_mut().unwrap_or(&mut self.env).set(ident, res);
 
         Ok(Expr::Nil)
     }

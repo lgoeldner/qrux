@@ -32,4 +32,11 @@
 (defun! nil? (it)
 	(nil \= it))
 
+(val! lt <)
+(val! gt >)
+(val! eq =)
+
+(defmacro! := (atom to)
+	`(do (reset! ,atom ,to) nil))
+
 )

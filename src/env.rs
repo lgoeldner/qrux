@@ -83,7 +83,7 @@ impl Env {
         )
     }
 
-    pub fn set(&self, ident: &Rc<str>, val: Expr) {
+    pub fn set(&mut self, ident: &Rc<str>, val: Expr) {
         self.0.data.borrow_mut().insert(Rc::clone(ident), val);
     }
 

@@ -43,6 +43,9 @@ pub enum QxErr {
         expected: Box<Expr>,
         found: Box<Expr>,
     },
+
+	#[error("{0}")]
+	LispErr(Expr)
 }
 
 impl Expr {
