@@ -96,16 +96,6 @@ impl Closure {
             is_macro,
         }
     }
-
-    #[must_use]
-    pub fn new_macro(args_name: Vec<Rc<str>>, body: Expr, captured: Env) -> Self {
-        Self {
-            args_name: args_name.into(),
-            body: Box::new(body),
-            captured,
-            is_macro: true,
-        }
-    }
 }
 
 impl std::fmt::Debug for Expr {

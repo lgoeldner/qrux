@@ -136,3 +136,19 @@ pub mod eval;
 pub mod lazy;
 pub mod print;
 pub mod read;
+
+trait Apply {
+    /// applies the function to self and returns the result
+    fn apply<R>(self, f: impl FnOnce(Self) -> R) -> R
+    where
+        Self: Sized;
+}
+
+impl<T> Apply for T {
+    fn apply<R>(self, f: impl FnOnce(Self) -> R) -> R
+    where
+        Self: Sized,
+    {
+        f(self)
+    }
+}

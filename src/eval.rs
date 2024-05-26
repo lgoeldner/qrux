@@ -1,11 +1,11 @@
 use crate::env::{Env, Inner};
-use crate::expr;
 use crate::read::Closure;
+use crate::{expr, Apply};
 use crate::{
     read::{Expr, QxErr},
     Runtime,
 };
-
+use anyhow::Ok as __aok;
 use anyhow::{anyhow, Context};
 use std::ops::ControlFlow;
 use std::rc::Rc;
@@ -103,10 +103,13 @@ impl Runtime {
             ("val!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             ("val!", _) => err!(form: "(val! <sym> <expr>)"),
 
-            ("def?", [Expr::Sym(s)]) => ControlFlow::Break(Ok(env
-                .unwrap_or_else(|| self.env.clone())
+            ("def?", [Expr::Sym(s)]) => env
+                .as_ref()
+                .unwrap_or(&self.env)
                 .get(s)
-                .unwrap_or(Expr::Nil))),
+                .unwrap_or(Expr::Nil)
+                .apply(Ok)
+                .apply(ControlFlow::Break),
 
             ("defmacro!", [Expr::Sym(ident), Expr::List(args), body]) => {
                 let closure = self.create_closure(&env, args, body, true);

@@ -52,13 +52,10 @@ impl Inner {
 
     pub fn with_fn_args(outer: Env, args: &[Expr], argsident: &[Rc<str>]) -> Result<Env, QxErr> {
         let env = Self::with_outer(outer);
+        let has_varargs = matches!(argsident.last(), Some(s) if s.starts_with('&'));
 
-        if argsident.len() != args.len()
-            && (argsident
-                .last()
-                .and_then(|it| it.starts_with('&').then_some(()))
-                .is_none()
-                && argsident.len() < args.len())
+        if (!has_varargs && argsident.len() != args.len())
+            || (has_varargs && argsident.len() < args.len())
         {
             return Err(QxErr::TypeErr {
                 expected: Box::new(Expr::List(
