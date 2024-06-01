@@ -116,7 +116,12 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
             }
         },
         "nth" => func_expr! { [Expr::Int(i), Expr::List(l)] => {
-            l.get(*i as usize).cloned().unwrap_or(Expr::Nil)
+            l.get(
+                usize::try_from(*i)
+                .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?
+            )
+            .cloned()
+            .unwrap_or(Expr::Nil)
         }},
         "cons" => func_expr! { [prepend, Expr::List(to)] => {
             let mut res = vec![prepend.clone()];
@@ -161,9 +166,9 @@ pub fn builtins(ident: &str) -> Option<Expr> {
             }
         },
         "writef" => func_expr! {
-            [Expr::String(file_location), Expr::String(to_write)] => 
+            [Expr::String(file_location), Expr::String(to_write)] =>
                 match std::fs::write(&**file_location, to_write.as_bytes()) {
-                    Ok(_) => Expr::Nil,
+                    Ok(()) => Expr::Nil,
                     Err(err) => Err(QxErr::Any(err.into()))?
                 }
         },
@@ -203,9 +208,14 @@ fn slice_expr() -> Expr {
         any in
         match any {
             [Expr::Int(from), Expr::Int(to), Expr::List(l)] => {
+                let from = usize::try_from(*from)
+                        .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?;
+                let to = usize::try_from(*to)
+                    .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?;
                 match l.as_ref()
-                .get(*from as usize..*to as usize)
-                .map(|it| Expr::List(it.into())) {
+                    .get(from..to)
+                    .map(|it| Expr::List(it.into())) 
+                {
                     Some(it) => it,
                     None => return Err(
                             QxErr::Any(
@@ -215,20 +225,25 @@ fn slice_expr() -> Expr {
                 }
             },
             [Expr::Int(from), Expr::Nil, Expr::List(l)] => {
-                match l.as_ref()
-                .get(*from as usize..)
-                .map(|it| Expr::List(it.into())) {
-                    Some(it) => it,
-                    None => return Err(
-                            QxErr::Any(
-                                anyhow!("Slice Index out of bounds: {from} to -, length: {}", l.len())
-                            )
-                        ),
-                }
-            }
+                    let from = usize::try_from(*from)
+                        .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?;
+
+                    match l.as_ref()
+                        .get(from..)
+                        .map(|it| Expr::List(it.into())) {
+                        Some(it) => it,
+                        None => return Err(
+                                QxErr::Any(
+                                    anyhow!("Slice Index out of bounds: {from} to -, length: {}", l.len())
+                                )
+                            ),
+                    }
+            },
             [Expr::Nil, Expr::Int(to), Expr::List(l)] => {
+                let to = usize::try_from(*to)
+                        .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?;
                 match l.as_ref()
-                .get(..*to as usize)
+                .get(..to)
                 .map(|it| Expr::List(it.into())) {
                     Some(it) => it,
                     None => return Err(

@@ -15,7 +15,7 @@ impl std::fmt::Display for Expr {
             list.iter()
                 .map(|it| {
                     if f.alternate() {
-                        format!("{:#}", it)
+                        format!("{it:#}")
                     } else {
                         format!("{it}")
                     }

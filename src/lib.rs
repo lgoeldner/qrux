@@ -52,8 +52,8 @@ impl Func {
 
 impl Runtime {
     /// returns the new Runtime and the result of evaluating the prelude and,
-    /// if supplied, the first env::arg as a file
-    #[must_use]
+    /// if supplied, the first `env::arg` as a file
+    
     pub fn new(repl: Term) -> (Self, PResult<Expr>) {
         let mut prototype = Self {
             repl,

@@ -1,8 +1,6 @@
 (do
 
-
 (val! t true)
-(val! f false)
 
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
@@ -75,34 +73,25 @@
 		nil ; nil if the assertion holds
 		(throw error))) ; else throw the error
 
-(defmacro! unwrap (it)
-	`(if (= nil ,it)
+(defun! unwrap (it)
+	(if (= nil it)
 		(throw "Non-nil Assertion failed!")
-		,it))
-
-(defun! try-nil (expr)
-	(try* expr (catch* _ nil)))
-
-(val! .. slice)
+		it))
 
 (defun! todo (message)
 	(throw (str "Not yet implemented: " message)))
 
 (defmacro! cond (&args)
-	(let* (
-			head (car args)
-			condition (car head)
-			expr (nth 1 head)
-			next (cdr args)
-		)
-			(if next
-				`(if ,condition
-						,expr
-						,(cons 'cond next)
-						;; dont know why it needs the cons instead of (cond ~next)
-						) 
-				nil)))
-
+	(let* ( 
+			first (car args)
+			condition (car first)
+			expr (nth 1 first)
+			next (cdr args))
+			`(if ,condition
+				,expr
+				,(if next
+					(cons 'cond next)
+					nil))))
 
 (if (= 1 (count *ARGS*))
 	(loadf (car *ARGS*))))

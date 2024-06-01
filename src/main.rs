@@ -1,19 +1,26 @@
+#![warn(clippy::pedantic, clippy::nursery)]
+#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
 fn main() {
     let mut runtime = match Runtime::new(Term::new()) {
-        (r, Ok(_)) => r,
         (_, Err(QxErr::Stop)) => return,
         (_, Err(QxErr::Fatal(e))) => {
             eprintln!("Fatal Exception before REPL: {e:#}");
             return;
         }
-        (r, Err(e)) => {eprintln!("Exception before REPL: {e}"); r},
+
+        (r, Ok(_)) => r,
+        (r, Err(e)) => {
+            eprintln!("Exception before REPL: {e}, continuing");
+            r
+        }
     };
 
     loop {
         match rep(&mut runtime) {
-            Ok(_) => {}
+            Ok(()) => {}
             Err(QxErr::Stop) => return,
             Err(QxErr::Fatal(e)) => {
                 eprintln!("Fatal Exception: {e:#}");

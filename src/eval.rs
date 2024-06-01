@@ -181,6 +181,18 @@ impl Runtime {
                     env,
                 })
             }
+            ("map", [fun, lst @ Expr::List(_)]) => {
+                let Expr::List(lst) = early_ret!(self.eval(lst.clone(), env.clone())) else {
+                    unreachable!()
+                };
+
+                let res = lst
+                    .iter()
+                    .map(|it| self.eval(expr!(list fun.clone(), it.clone()), env.clone()))
+                    .collect::<Result<Vec<_>, _>>();
+
+                ControlFlow::Break(Ok(Expr::List(early_ret!(res).into())))
+            }
             _ => self.apply_func(Expr::List(lst.to_vec().into_boxed_slice().into()), env),
         }
     }
@@ -197,7 +209,7 @@ impl Runtime {
                 unreachable!()
             };
 
-            let mut err_env = Env::with_outer(env.as_ref().unwrap_or_else(|| &self.env).clone());
+            let mut err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
             err_env.set(
                 catch_to_sym,
@@ -224,7 +236,7 @@ impl Runtime {
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         // create new env, set as current, old env is now self.env.outer
 
-        let mut env = Env::with_outer(env.as_ref().unwrap_or_else(|| &self.env).clone());
+        let mut env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
         for pair in new_bindings.chunks_exact(2) {
             let [Expr::Sym(ident), expr] = pair else {

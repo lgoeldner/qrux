@@ -49,7 +49,8 @@ pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<Expr> {
     Input::get(runtime.term())?.tokenize().try_into()
 }
 
-pub(crate) fn read_string(runtime: &mut Runtime, s: std::rc::Rc<str>) -> PResult<Expr> {
+#[allow(dead_code)]
+pub(crate) fn from_string(s: std::rc::Rc<str>) -> PResult<Expr> {
 	Input(s).tokenize().try_into()
 }
 
