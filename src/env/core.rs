@@ -134,6 +134,9 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
             else { Expr::Nil }
         } },
         "slice" => slice_expr(),
+        "rev" => func_expr! { [Expr::List(it)] => 
+            Expr::List(it.iter().cloned().rev().collect::<Vec<_>>().into()) 
+        },
         _ => None?,
     })
 }
@@ -214,7 +217,7 @@ fn slice_expr() -> Expr {
                     .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?;
                 match l.as_ref()
                     .get(from..to)
-                    .map(|it| Expr::List(it.into())) 
+                    .map(|it| Expr::List(it.into()))
                 {
                     Some(it) => it,
                     None => return Err(
