@@ -11,7 +11,7 @@ use std::ops::ControlFlow;
 use std::rc::Rc;
 
 // helper for error because we can't use `?`
-// due to ControlFlow for TCO
+// needed due to ControlFlow for TCO
 macro_rules! err {
     // for special form args errors
     (form: $form:literal) => {
@@ -30,7 +30,7 @@ macro_rules! err {
     };
 }
 
-macro_rules! ret_ok {
+macro_rules! break_ok {
     ($ex:expr) => {
         ControlFlow::Break(Ok($ex))
     };
@@ -104,31 +104,17 @@ impl Runtime {
             ("val!", _) => err!(form: "(val! <sym> <expr>)"),
 
             // form: (try* <expr> (catch* <sym> <expr>))
-            ("try*", [try_expr, Expr::List(catch)]) if matches!(&**catch, [Expr::Sym(s), Expr::Sym(_), _] if &**s == "catch") =>
+            ("try*", [try_expr, Expr::List(catch)])
+                if matches!(
+                    &**catch,
+                    [
+                    Expr::Sym(catch),
+                    Expr::Sym(_catch_to),
+                    _catch_expr
+                    ] if &**catch == "catch*"
+                ) =>
             {
-                let res = self.eval(try_expr.clone(), env.clone());
-                if let Err(e) = res {
-                    let Expr::Sym(catch_to_sym) = &catch[1] else {
-                        unreachable!()
-                    };
-
-                    let mut err_env = Env::with_outer(env.unwrap_or_else(|| self.env.clone()));
-
-                    err_env.set(
-                        catch_to_sym,
-                        match e {
-                            QxErr::LispErr(e) => e,
-                            _ => Expr::String(e.to_string().into()),
-                        },
-                    );
-
-                    ControlFlow::Continue(EvalTco {
-                        ast: catch[2].clone(),
-                        env: Some(err_env),
-                    })
-                } else {
-                    ControlFlow::Break(res)
-                }
+                self.eval_trycatch(try_expr, &env, catch)
             }
 
             ("def?", [Expr::Sym(s)]) => env
@@ -144,7 +130,7 @@ impl Runtime {
                 match closure {
                     ControlFlow::Break(Ok(Expr::Closure(cl))) => {
                         self.env.set(ident, Expr::Closure(cl));
-                        ret_ok!(expr!(nil))
+                        break_ok!(expr!(nil))
                     }
 
                     _ => unreachable!(),
@@ -155,6 +141,7 @@ impl Runtime {
             ("mexp", ast @ [Expr::Sym(_), ..]) => {
                 ControlFlow::Break(self.macroexpand(Expr::List(ast.into()), &env))
             }
+			("mexp", _) => err!(form: "(mexp (<macro> <args>*))"),
 
             ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body, false),
             ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
@@ -163,26 +150,7 @@ impl Runtime {
             ("if", _) => err!(form: "(if <condition> <then> ?<else>)"),
 
             ("let*", [Expr::List(new_bindings), to_eval]) => {
-                // create new env, set as current, old env is now self.env.outer
-
-                let mut env = Inner::with_outer(env.unwrap_or_else(|| self.env.clone()));
-
-                for pair in new_bindings.chunks_exact(2) {
-                    let [Expr::Sym(ident), expr] = pair else {
-                        return ControlFlow::Break(Err(QxErr::TypeErr {
-                            expected: Box::new(expr!(sym "<sym>")),
-                            found: Box::new(pair[0].clone()),
-                        }));
-                    };
-
-                    let val = self.eval(expr.clone(), Some(env.clone()));
-                    env.set(ident, early_ret!(val));
-                }
-
-                ControlFlow::Continue(EvalTco {
-                    ast: to_eval.clone(),
-                    env: Some(env),
-                })
+                self.eval_do(&env, new_bindings, to_eval)
             }
             ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
 
@@ -215,6 +183,65 @@ impl Runtime {
             }
             _ => self.apply_func(Expr::List(lst.to_vec().into_boxed_slice().into()), env),
         }
+    }
+
+    fn eval_trycatch(
+        &mut self,
+        try_expr: &Expr,
+        env: &Option<Env>,
+        catch: &Rc<[Expr]>,
+    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+        let res = self.eval(try_expr.clone(), env.clone());
+        if let Err(e) = res {
+            let Expr::Sym(catch_to_sym) = &catch[1] else {
+                unreachable!()
+            };
+
+            let mut err_env = Env::with_outer(env.as_ref().unwrap_or_else(|| &self.env).clone());
+
+            err_env.set(
+                catch_to_sym,
+                match e {
+                    QxErr::LispErr(e) => e,
+                    _ => Expr::String(e.to_string().into()),
+                },
+            );
+
+            ControlFlow::Continue(EvalTco {
+                ast: catch[2].clone(),
+                env: Some(err_env),
+            })
+        } else {
+            ControlFlow::Break(res)
+        }
+    }
+
+    fn eval_do(
+        &mut self,
+        env: &Option<Env>,
+        new_bindings: &Rc<[Expr]>,
+        to_eval: &Expr,
+    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+        // create new env, set as current, old env is now self.env.outer
+
+        let mut env = Env::with_outer(env.as_ref().unwrap_or_else(|| &self.env).clone());
+
+        for pair in new_bindings.chunks_exact(2) {
+            let [Expr::Sym(ident), expr] = pair else {
+                return ControlFlow::Break(Err(QxErr::TypeErr {
+                    expected: Box::new(expr!(sym "<sym>")),
+                    found: Box::new(pair[0].clone()),
+                }));
+            };
+
+            let val = self.eval(expr.clone(), Some(env.clone()));
+            env.set(ident, early_ret!(val));
+        }
+
+        ControlFlow::Continue(EvalTco {
+            ast: to_eval.clone(),
+            env: Some(env),
+        })
     }
 
     fn eval_if(
@@ -265,7 +292,7 @@ impl Runtime {
             is_macro,
         );
 
-        ret_ok!(Expr::Closure(Rc::new(cl)))
+        break_ok!(Expr::Closure(Rc::new(cl)))
     }
 
     fn apply_func(

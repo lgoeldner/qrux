@@ -1,16 +1,37 @@
 (do
 
+(val! t true)
+(val! f false)
+
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
 
 (defmacro! when (cond &body)
 	`(if ,cond (do ~body)))
 
+;;; Boolean Operators
 (defun! not (bool)
 	(if bool
 		false
 		true))
 
+; macro for short circuiting
+(defmacro! and (lhs rhs)
+	`(if ,lhs
+		(if ,rhs
+			true
+			false)
+		false))
+
+(defmacro! or (lhs rhs)
+	`(if ,lhs
+		false
+		(if ,rhs
+			true
+			false)))
+
+(val! | or)
+(val! & and)
 (val! ! not)
 
 (defun! rep (str)
@@ -20,7 +41,10 @@
 ; load a file and execute it with a do block wrapped around
 (defun! loadf (path)
 	(rep
-		(str "(do" (slurp path) "(println \"done!\"))" )))
+		(str 
+			"(do" 
+			(slurp path)
+			")")))
 
 ; returns a curried function
 ; swaps the order of two arguments
@@ -30,13 +54,34 @@
 	(concat to (list el)))
 
 (defun! nil? (it)
-	(nil \= it))
+	(= nil it))
 
 (val! lt <)
 (val! gt >)
 (val! eq =)
 
-(defmacro! := (atom to)
-	`(do (reset! ,atom ,to) nil))
+(defmacro! := (atom set_to)
+	`(do (reset! ,atom ,set_to) nil))
 
+
+(defmacro! assert (cond)
+	`(if (= ,cond true)
+		nil ; Nothing if the assertion holds
+		(throw 
+			(str "Assertion Failed: " ',cond))))
+
+
+(defmacro! assert-or (cond error)
+	`(if (= ,cond true)
+		nil ; Nothing if the assertion holds
+		(throw 
+			error)))
+
+(defmacro! unwrap (it)
+	`(if (= nil ,it)
+		(throw "Non-nil Assertion failed!")
+		,it
+		))
+
+(val! .. slice)
 )

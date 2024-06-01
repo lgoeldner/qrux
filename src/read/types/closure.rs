@@ -79,8 +79,9 @@ impl Closure {
         let env = Env::with_outer(self.captured.clone());
         let has_varargs = matches!(self.args_name.last(), Some(s) if s.starts_with('&'));
 
+
         if (!has_varargs && self.args_name.len() != args.len())
-            || (has_varargs && self.args_name.len() < args.len())
+            || (has_varargs && self.args_name.len() > args.len())
         {
             return Err(QxErr::TypeErr {
                 expected: Box::new(Expr::List(

@@ -13,7 +13,13 @@ impl std::fmt::Display for Expr {
             write!(f, "(")?;
 
             list.iter()
-                .map(ToString::to_string)
+                .map(|it| {
+                    if f.alternate() {
+                        format!("{:#}", it)
+                    } else {
+                        format!("{it}")
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(" ")
                 .fmt(f)?;
@@ -28,7 +34,7 @@ impl std::fmt::Display for Expr {
                 Self::Sym(sym) => sym.fmt(f),
                 Self::String(string) => string.fmt(f),
                 Self::List(list) => write_list(f, list),
-                Self::Nil => "nil".bold().blue().fmt(f),
+                Self::Nil => "nil".fmt(f),
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
             }

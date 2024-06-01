@@ -2,7 +2,7 @@ use std::backtrace::Backtrace;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 
 use crate::read::Expr;
 use crate::{expr, read, Func, QxErr};
@@ -104,26 +104,46 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
             variadic in {
                 let mut res = vec![];
                 for it in variadic {
-                    if let Expr::List(l) = it {
-                        res.extend_from_slice(l);
-                    } else {
-                        return Err(QxErr::TypeErr { expected: Box::new(expr!(List)), found: Box::new(it.clone()) });
+                    if let Expr::List(l) = it { res.extend_from_slice(l); }
+                    else {
+                        return Err(QxErr::TypeErr {
+                            expected: Box::new(expr!(List)),
+                            found: Box::new(it.clone())
+                        });
                     }
                 }
 
                 Expr::List(res.into())
             }
         },
+        "nth" => func_expr! { [Expr::Int(i), Expr::List(l)] => {
+            l.get(*i as usize).cloned().unwrap_or(Expr::Nil)
+        }},
+
         "cons" => func_expr! { [prepend, Expr::List(to)] => {
             let mut res = vec![prepend.clone()];
             res.extend_from_slice(to);
             Expr::List(res.into())
         }},
-        "head" => func_expr! { [Expr::List(it)] => it.first().cloned().unwrap_or(Expr::Nil) },
-        "tail" => func_expr! {[Expr::List(it)] => {
+        "car" => func_expr! { [Expr::List(it)] => it.first().cloned().unwrap_or(Expr::Nil) },
+        "cdr" => func_expr! {[Expr::List(it)] => {
             if it.len() > 1 { Expr::List(it[1..].into()) }
             else { Expr::Nil }
         } },
+        "slice" => func_expr! {
+            [Expr::Int(from), Expr::Int(to), Expr::List(l)] => {
+                match l.as_ref()
+                 .get(*from as usize..*to as usize)
+                 .map(|it| Expr::List(it.into())) {
+                    Some(it) => it,
+                    None => return Err(
+                            QxErr::Any(
+                                anyhow!("Slice Index out of bounds: {from}..{to}, length: {}", l.len())
+                            )
+                        ),
+                 }
+            }
+        },
         _ => None?,
     })
 }
@@ -145,8 +165,9 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                         .into_boxed_str().into()
                 )
         },
+		"sym" => func_expr! { [Expr::String(s)] => Expr::Sym(Rc::clone(s)) },
         "read-string" => {
-            func_expr! { [Expr::String(s)] => read::Input(s.to_owned()).tokenize().try_into()? }
+            func_expr! { [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()? }
         }
         "slurp" => func_expr! { [Expr::String(s)] => {
                  Expr::String(
@@ -176,7 +197,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
 
             res
         } },
-		"throw" => func_expr! { [expr] => Err(QxErr::LispErr(expr.clone()))? },
+        "throw" => func_expr! { [expr] => Err(QxErr::LispErr(expr.clone()))? },
         _ => None?,
     })
 }

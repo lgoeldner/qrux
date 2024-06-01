@@ -1,13 +1,43 @@
-
 (defun! range (from to)
 	(if (< from to)
 		(cons from (range (from \+ 1) to))
 		'()))
 
-
 (val! -> range)
 (val! <- (swap ->))
 
-
 (defun! append (el to)
 	(concat to (list el)))
+
+(defun! dbg (it)
+	(do
+		(prn it)
+		it))
+
+(defun! part (fun &args)
+	(fn* (&rest) (eval `(,fun ~args ~rest))))
+
+
+(defun! while (cond lst) 
+	(let* (alst !!lst)
+
+
+	))
+
+(defmacro! cut (&body)
+	())
+
+
+(defmacro! apply (&args)
+	(let* (last ((count args) \- 1))
+		(do
+			(assert-or
+				(list? (nth last args)) 
+				"apply needs a list as the last argument")
+
+			`(,(car args) ; first function
+				~(slice 1 last args) ; rest of the arguments
+				~(nth last args))))) ; arguments provided in a list
+
+	
+(println "Done!")
