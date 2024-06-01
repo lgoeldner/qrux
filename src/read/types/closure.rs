@@ -12,30 +12,6 @@ pub struct Closure {
     pub is_macro: bool,
 }
 
-struct _Arg {
-    name: Rc<str>,
-    typed: Option<Type>
-}
-
-struct Type {
-    nullable: bool,
-    nonnull_type: NonNullType,
-}
-
-enum NonNullType {
-    AnyNonNull,
-    Atom,
-    List,
-    Int,
-    Sym,
-    String,
-    Bool,
-    Closure,
-    Func,
-    Nil,
-    TypedList(Box<Type>),
-}
-
 impl Eq for Closure {}
 impl PartialEq for Closure {
     fn eq(&self, _: &Self) -> bool {

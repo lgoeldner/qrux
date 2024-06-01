@@ -1,11 +1,10 @@
-use crate::env::{Env, Inner};
+use crate::env::Env;
 use crate::read::types::closure::Closure;
 use crate::{expr, Apply};
 use crate::{
     read::{Expr, QxErr},
     Runtime,
 };
-use anyhow::Ok as __aok;
 use anyhow::{anyhow, Context};
 use std::ops::ControlFlow;
 use std::rc::Rc;
@@ -116,6 +115,7 @@ impl Runtime {
             {
                 self.eval_trycatch(try_expr, &env, catch)
             }
+            ("try*", _) => err!(form: "(try* <expr> (catch* <sym> <expr>))"),
 
             ("def?", [Expr::Sym(s)]) => env
                 .as_ref()
@@ -141,7 +141,7 @@ impl Runtime {
             ("mexp", ast @ [Expr::Sym(_), ..]) => {
                 ControlFlow::Break(self.macroexpand(Expr::List(ast.into()), &env))
             }
-			("mexp", _) => err!(form: "(mexp (<macro> <args>*))"),
+            ("mexp", _) => err!(form: "(mexp (<macro> <args>*))"),
 
             ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body, false),
             ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
@@ -396,21 +396,22 @@ fn is_special_form(sym: &str) -> bool {
             | "unquote"
             | "splice-unquote"
             | "defmacro!"
+            | "try*"
+            | "catch*"
     )
 }
 
 fn qq_list(elts: &[Expr]) -> Expr {
     let mut acc = vec![];
     for elt in elts.iter().rev() {
-        if let Expr::List(v) = elt {
-            if v.len() == 2 {
-                if let Expr::Sym(ref s) = v[0] {
-                    if &**s == "splice-unquote" {
-                        acc = vec![expr!(concat), v[1].clone(), Expr::List(acc.into())];
-                        continue;
-                    }
+        match elt {
+            Expr::List(v) if v.len() == 2 => {
+                if matches!(v[0], Expr::Sym(ref s) if &** s == "splice-unquote") {
+                    acc = vec![expr!(concat), v[1].clone(), Expr::List(acc.into())];
+                    continue;
                 }
             }
+            _ => {}
         }
         acc = vec![expr!(cons), quasiquote(elt), Expr::List(acc.into())];
     }

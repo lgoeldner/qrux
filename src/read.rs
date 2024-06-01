@@ -49,6 +49,10 @@ pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<Expr> {
     Input::get(runtime.term())?.tokenize().try_into()
 }
 
+pub(crate) fn read_string(runtime: &mut Runtime, s: std::rc::Rc<str>) -> PResult<Expr> {
+	Input(s).tokenize().try_into()
+}
+
 impl TryFrom<TokenStream<'_>> for Expr {
     type Error = QxErr;
     fn try_from(value: TokenStream<'_>) -> Result<Self, Self::Error> {

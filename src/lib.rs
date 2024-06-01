@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::{Env, Inner};
-use read::{Expr, QxErr};
+use read::{Expr, PResult, QxErr};
 
 type FuncT = fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>;
 
@@ -51,28 +51,28 @@ impl Func {
 }
 
 impl Runtime {
+    /// returns the new Runtime and the result of evaluating the prelude and,
+    /// if supplied, the first env::arg as a file
     #[must_use]
-    pub fn new(repl: Term) -> Self {
+    pub fn new(repl: Term) -> (Self, PResult<Expr>) {
         let mut prototype = Self {
             repl,
             env: Inner::new_env(None),
         };
-
-        prototype
-            .eval(
-                include_str!("init.qx")
-                    .parse()
-                    .expect("builtin prelude failed"),
-                None,
-            )
-            .expect("builtin prelude failed");
 
         prototype.env.set(
             &"*ARGS*".into(),
             Expr::List(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
         );
 
-        prototype
+        let res = prototype.eval(
+            include_str!("init.qx")
+                .parse()
+                .expect("builtin prelude failed"),
+            None,
+        );
+
+        (prototype, res)
     }
 
     #[must_use]

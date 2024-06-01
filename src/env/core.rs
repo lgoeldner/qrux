@@ -1,4 +1,3 @@
-use std::backtrace::Backtrace;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -119,7 +118,6 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
         "nth" => func_expr! { [Expr::Int(i), Expr::List(l)] => {
             l.get(*i as usize).cloned().unwrap_or(Expr::Nil)
         }},
-
         "cons" => func_expr! { [prepend, Expr::List(to)] => {
             let mut res = vec![prepend.clone()];
             res.extend_from_slice(to);
@@ -130,20 +128,7 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
             if it.len() > 1 { Expr::List(it[1..].into()) }
             else { Expr::Nil }
         } },
-        "slice" => func_expr! {
-            [Expr::Int(from), Expr::Int(to), Expr::List(l)] => {
-                match l.as_ref()
-                 .get(*from as usize..*to as usize)
-                 .map(|it| Expr::List(it.into())) {
-                    Some(it) => it,
-                    None => return Err(
-                            QxErr::Any(
-                                anyhow!("Slice Index out of bounds: {from}..{to}, length: {}", l.len())
-                            )
-                        ),
-                 }
-            }
-        },
+        "slice" => slice_expr(),
         _ => None?,
     })
 }
@@ -165,7 +150,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                         .into_boxed_str().into()
                 )
         },
-		"sym" => func_expr! { [Expr::String(s)] => Expr::Sym(Rc::clone(s)) },
+        "sym" => func_expr! { [Expr::String(s)] => Expr::Sym(Rc::clone(s)) },
         "read-string" => {
             func_expr! { [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()? }
         }
@@ -175,6 +160,13 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                 )
             }
         },
+        "writef" => func_expr! {
+            [Expr::String(file_location), Expr::String(to_write)] => 
+                match std::fs::write(&**file_location, to_write.as_bytes()) {
+                    Ok(_) => Expr::Nil,
+                    Err(err) => Err(QxErr::Any(err.into()))?
+                }
+        },
         "eval" => func_expr! {
             ctx: ctx; [ast] => ctx.eval(ast.clone(), None)?
         },
@@ -182,6 +174,10 @@ pub fn builtins(ident: &str) -> Option<Expr> {
             ctx: ctx; [] => { println!("{:#?}", ctx.env); Expr::Nil }
         },
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
+        "fatal" => func_expr! { [expr] =>
+            // return the lisp value expr as a fatal error
+            Err(QxErr::Fatal(Box::new(QxErr::LispErr(expr.clone()))))?
+        },
         "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },
         "atom?" => func_expr!([expr] => Expr::Bool(matches!(expr, Expr::Atom(_)))),
         "deref" => func_expr! { [Expr::Atom(it)] => it.borrow().clone() },
@@ -200,4 +196,49 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         "throw" => func_expr! { [expr] => Err(QxErr::LispErr(expr.clone()))? },
         _ => None?,
     })
+}
+
+fn slice_expr() -> Expr {
+    func_expr! {
+        any in
+        match any {
+            [Expr::Int(from), Expr::Int(to), Expr::List(l)] => {
+                match l.as_ref()
+                .get(*from as usize..*to as usize)
+                .map(|it| Expr::List(it.into())) {
+                    Some(it) => it,
+                    None => return Err(
+                            QxErr::Any(
+                                anyhow!("Slice Index out of bounds: {from} to {to}, length: {}", l.len())
+                            )
+                        ),
+                }
+            },
+            [Expr::Int(from), Expr::Nil, Expr::List(l)] => {
+                match l.as_ref()
+                .get(*from as usize..)
+                .map(|it| Expr::List(it.into())) {
+                    Some(it) => it,
+                    None => return Err(
+                            QxErr::Any(
+                                anyhow!("Slice Index out of bounds: {from} to -, length: {}", l.len())
+                            )
+                        ),
+                }
+            }
+            [Expr::Nil, Expr::Int(to), Expr::List(l)] => {
+                match l.as_ref()
+                .get(..*to as usize)
+                .map(|it| Expr::List(it.into())) {
+                    Some(it) => it,
+                    None => return Err(
+                            QxErr::Any(
+                                anyhow!("Slice Index out of bounds: - to {to}, length: {}", l.len())
+                            )
+                        ),
+                }
+            }
+            _ => return Err(QxErr::NoArgs(Some(any.to_vec()))),
+        }
+    }
 }

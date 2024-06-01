@@ -2,8 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::expr;
-use crate::read::{Expr, QxErr};
+use crate::read::Expr;
 
 use self::core::{builtins, cmp_ops, int_ops, list_builtins};
 

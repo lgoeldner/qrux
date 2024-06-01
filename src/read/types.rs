@@ -2,9 +2,13 @@ use std::{cell::RefCell, rc::Rc};
 
 use thiserror::Error;
 
-use crate::{env::Env, Func};
+use crate::Func;
 
 pub type PResult<T> = Result<T, QxErr>;
+
+pub mod closure;
+pub mod typing;
+pub use closure::Closure;
 
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
@@ -44,8 +48,8 @@ pub enum QxErr {
         found: Box<Expr>,
     },
 
-	#[error("{0}")]
-	LispErr(Expr)
+    #[error("{0}")]
+    LispErr(Expr),
 }
 
 impl Expr {
@@ -73,10 +77,6 @@ impl std::fmt::Display for ParenType {
         }
     }
 }
-
-
-pub mod closure;
-pub use closure::Closure;
 
 impl std::fmt::Debug for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

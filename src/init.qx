@@ -1,5 +1,6 @@
 (do
 
+
 (val! t true)
 (val! f false)
 
@@ -63,25 +64,45 @@
 (defmacro! := (atom set_to)
 	`(do (reset! ,atom ,set_to) nil))
 
-
 (defmacro! assert (cond)
 	`(if (= ,cond true)
-		nil ; Nothing if the assertion holds
+		nil ; nil if the assertion holds
 		(throw 
 			(str "Assertion Failed: " ',cond))))
 
-
 (defmacro! assert-or (cond error)
 	`(if (= ,cond true)
-		nil ; Nothing if the assertion holds
-		(throw 
-			error)))
+		nil ; nil if the assertion holds
+		(throw error))) ; else throw the error
 
 (defmacro! unwrap (it)
 	`(if (= nil ,it)
 		(throw "Non-nil Assertion failed!")
-		,it
-		))
+		,it))
+
+(defun! try-nil (expr)
+	(try* expr (catch* _ nil)))
 
 (val! .. slice)
-)
+
+(defun! todo (message)
+	(throw (str "Not yet implemented: " message)))
+
+(defmacro! cond (&args)
+	(let* (
+			head (car args)
+			condition (car head)
+			expr (nth 1 head)
+			next (cdr args)
+		)
+			(if next
+				`(if ,condition
+						,expr
+						,(cons 'cond next)
+						;; dont know why it needs the cons instead of (cond ~next)
+						) 
+				nil)))
+
+
+(if (= 1 (count *ARGS*))
+	(loadf (car *ARGS*))))
