@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::num::TryFromIntError;
+use std::ops;
 use std::rc::Rc;
 use std::time::SystemTime;
 
@@ -93,9 +94,9 @@ use std::fmt::Write;
 
 pub fn list_builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
-        "list:contains" => func_expr! {ctx:ctx;
+        "list:contains" => func_expr! {"list:contains";
             [Expr::String(search_by) | Expr::Sym(search_by), lst @ Expr::List(_)] =>
-            	Expr::Bool(lst.contains_sym(search_by))
+                Expr::Bool(lst.contains_sym(search_by))
         },
         "list" => func_expr! {it in Expr::List(it.iter().cloned().collect()) },
         "list?" => func_expr! {"list?";
@@ -151,6 +152,45 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
 
 static FIRST_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
 
+pub fn str_builtins(ident: &str) -> Option<Expr> {
+    Some(match ident {
+        "str?" => {
+            func_expr! {"str?"; [maybe_str] => Expr::Bool(matches!(maybe_str, Expr::String(_))) }
+        }
+        "str" => func_expr! {
+            any in
+                Expr::String(
+                    any.iter()
+                    .try_fold(String::new(), |mut acc , it| {
+                            write!(acc, "{it:#}")
+                            .map(|()| acc)
+                        })
+                        .map_err(|it| QxErr::Any(it.into()))?
+                        .into_boxed_str().into()
+                )
+        },
+        "str:len" => {
+            func_expr! {"str:len"; [Expr::String(s)] =>
+            Expr::Int(s.len().try_into().map_err(|it: TryFromIntError| QxErr::Any(it.into()))?) }
+        }
+        "str:slice" => {
+            func_expr! {"str:slice";
+                [Expr::Int(from), Expr::Int(to), Expr::String(s)] =>
+                     s.get(*from as usize..*to as usize).map_or(Expr::Nil, |it| Expr::String(it.into()))
+            }
+        }
+        "sym" => func_expr! {"sym";
+            [Expr::String(s) | Expr::Sym(s)] => 
+			if !s.contains(' ') { 
+				Expr::Sym(Rc::clone(s))
+			} else { 
+				Err(QxErr::Any(anyhow!("\"{s}\" may not be converted to a symbol!")))?
+			}
+        },
+        _ => None?,
+    })
+}
+
 pub fn builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
         "time" => func_expr! {"time"; [] =>
@@ -164,20 +204,9 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         "=" => func_expr! {"="; [lhs, rhs] => Expr::Bool(lhs == rhs) },
         "println" => func_expr! {"println"; [expr] => { println!("{expr:#}"); Expr::Nil }},
         "prn" => func_expr! {"prn"; [expr] => { println!("{expr}"); Expr::Nil }},
-		"sym?" => func_expr! {"sym?"; [maybe_sym] => Expr::Bool(matches!(maybe_sym, Expr::Sym(_))) },
-        "str" => func_expr! {
-            any in
-                Expr::String(
-                    any.iter()
-                    .try_fold(String::new(), |mut acc , it| {
-                            write!(acc, "{it:#}")
-                            .map(|()| acc)
-                        })
-                        .map_err(|it| QxErr::Any(it.into()))?
-                        .into_boxed_str().into()
-                )
-        },
-        "sym" => func_expr! {"sym"; [Expr::String(s)] => Expr::Sym(Rc::clone(s)) },
+        "sym?" => {
+            func_expr! {"sym?"; [maybe_sym] => Expr::Bool(matches!(maybe_sym, Expr::Sym(_))) }
+        }
         "read-string" => {
             func_expr! {"read-string"; [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()? }
         }

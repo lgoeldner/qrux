@@ -1,3 +1,4 @@
+use core::str_builtins;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -38,6 +39,7 @@ fn core_map(inp: &str) -> Option<Expr> {
         .or_else(|| cmp_ops(inp))
         .or_else(|| int_ops(inp))
         .or_else(|| list_builtins(inp))
+		.or_else(|| str_builtins(inp))
 }
 
 impl Inner {

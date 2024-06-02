@@ -30,6 +30,7 @@ pub enum QxErr {
     Stop,
     #[error("Fatal Error: {0}")]
     Fatal(#[from] Box<QxErr>),
+
     #[error(transparent)]
     Any(#[from] anyhow::Error),
 
