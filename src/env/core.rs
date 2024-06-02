@@ -1,20 +1,24 @@
 use std::cell::RefCell;
+use std::num::TryFromIntError;
 use std::rc::Rc;
+use std::time::SystemTime;
 
 use anyhow::{anyhow, Context};
 
+use crate::lazy::Lazy;
 use crate::read::Expr;
 use crate::{expr, read, Func, QxErr};
 
 macro_rules! func_expr {
     // handles argument matching and returning
-    ($args_pat:pat => $exp:expr) => {
+    ($name:literal; $args_pat:pat => $exp:expr) => {
         Func::new_expr(|_, args| {
             if let $args_pat = args {
                 Ok($exp)
             } else {
                 Err(QxErr::Any(anyhow::anyhow!(
-                    "Expected pattern {}, got: {:?}",
+                    "In {}: Expected pattern {}, got: {:?}",
+                    stringify!($name),
                     stringify!($args_pat),
                     args
                 )))
@@ -47,7 +51,7 @@ pub fn cmp_ops(ident: &str) -> Option<Expr> {
 		(match $ident:ident => { $($op:tt),+ }) => {
 			match $ident {
 				$(
-					stringify!($op) => func_expr! { [Expr::Int(l), Expr::Int(r)] => Expr::Bool(l $op r) },
+					stringify!($op) => func_expr! {""; [Expr::Int(l), Expr::Int(r)] => Expr::Bool(l $op r) },
 				)+
 				_ => None?,
 			}
@@ -89,13 +93,17 @@ use std::fmt::Write;
 
 pub fn list_builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
-        "list" => func_expr! { it in Expr::List(it.iter().cloned().collect()) },
-        "list?" => func_expr! {
+        "list:contains" => func_expr! {ctx:ctx;
+            [Expr::String(search_by) | Expr::Sym(search_by), lst @ Expr::List(_)] =>
+            	Expr::Bool(lst.contains_sym(search_by))
+        },
+        "list" => func_expr! {it in Expr::List(it.iter().cloned().collect()) },
+        "list?" => func_expr! {"list?";
             [maybe_list] => Expr::Bool(matches!(maybe_list, Expr::List(_)))
         },
-        "empty?" => func_expr! { [Expr::List(l)] => Expr::Bool(l.is_empty()) },
+        "empty?" => func_expr! {"empty?"; [Expr::List(l)] => Expr::Bool(l.is_empty()) },
         "count" => {
-            func_expr! {
+            func_expr! {"count";
                 [Expr::List(l)] => Expr::Int( l.len().try_into().context("Integer Overflow")? )
             }
         }
@@ -115,7 +123,7 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
                 Expr::List(res.into())
             }
         },
-        "nth" => func_expr! { [Expr::Int(i), Expr::List(l)] => {
+        "nth" => func_expr! {"nth"; [Expr::Int(i), Expr::List(l)] => {
             l.get(
                 usize::try_from(*i)
                 .map_err(|_| QxErr::Any(anyhow!("Integer overflow")))?
@@ -123,29 +131,40 @@ pub fn list_builtins(ident: &str) -> Option<Expr> {
             .cloned()
             .unwrap_or(Expr::Nil)
         }},
-        "cons" => func_expr! { [prepend, Expr::List(to)] => {
+        "cons" => func_expr! {"cons"; [prepend, Expr::List(to)] => {
             let mut res = vec![prepend.clone()];
             res.extend_from_slice(to);
             Expr::List(res.into())
         }},
-        "car" => func_expr! { [Expr::List(it)] => it.first().cloned().unwrap_or(Expr::Nil) },
-        "cdr" => func_expr! {[Expr::List(it)] => {
+        "car" => func_expr! {"car"; [Expr::List(it)] => it.first().cloned().unwrap_or(Expr::Nil) },
+        "cdr" => func_expr! {"cdr"; [Expr::List(it)] => {
             if it.len() > 1 { Expr::List(it[1..].into()) }
             else { Expr::Nil }
         } },
         "slice" => slice_expr(),
-        "rev" => func_expr! { [Expr::List(it)] => 
-            Expr::List(it.iter().cloned().rev().collect::<Vec<_>>().into()) 
+        "rev" => func_expr! {"rev"; [Expr::List(it)] =>
+            Expr::List(it.iter().cloned().rev().collect::<Vec<_>>().into())
         },
         _ => None?,
     })
 }
 
+static FIRST_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
+
 pub fn builtins(ident: &str) -> Option<Expr> {
     Some(match ident {
-        "=" => func_expr! { [lhs, rhs] => Expr::Bool(lhs == rhs) },
-        "println" => func_expr! {[expr] => { println!("{expr:#}"); Expr::Nil }},
-        "prn" => func_expr! {[expr] => { println!("{expr}"); Expr::Nil }},
+        "time" => func_expr! {"time"; [] =>
+            Expr::Int(FIRST_TIME
+                .elapsed()
+                .map_err(|it| QxErr::Any(it.into()))?
+                .as_millis()
+                .try_into()
+                .map_err(|it: TryFromIntError| QxErr::Any(it.into()))?)
+        },
+        "=" => func_expr! {"="; [lhs, rhs] => Expr::Bool(lhs == rhs) },
+        "println" => func_expr! {"println"; [expr] => { println!("{expr:#}"); Expr::Nil }},
+        "prn" => func_expr! {"prn"; [expr] => { println!("{expr}"); Expr::Nil }},
+		"sym?" => func_expr! {"sym?"; [maybe_sym] => Expr::Bool(matches!(maybe_sym, Expr::Sym(_))) },
         "str" => func_expr! {
             any in
                 Expr::String(
@@ -158,17 +177,17 @@ pub fn builtins(ident: &str) -> Option<Expr> {
                         .into_boxed_str().into()
                 )
         },
-        "sym" => func_expr! { [Expr::String(s)] => Expr::Sym(Rc::clone(s)) },
+        "sym" => func_expr! {"sym"; [Expr::String(s)] => Expr::Sym(Rc::clone(s)) },
         "read-string" => {
-            func_expr! { [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()? }
+            func_expr! {"read-string"; [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()? }
         }
-        "slurp" => func_expr! { [Expr::String(s)] => {
+        "slurp" => func_expr! {"slurp"; [Expr::String(s)] => {
                  Expr::String(
                     std::fs::read_to_string(s as &str).map_err(|err| QxErr::Any(err.into()))?.into()
                 )
             }
         },
-        "writef" => func_expr! {
+        "writef" => func_expr! {"writef";
             [Expr::String(file_location), Expr::String(to_write)] =>
                 match std::fs::write(&**file_location, to_write.as_bytes()) {
                     Ok(()) => Expr::Nil,
@@ -182,14 +201,14 @@ pub fn builtins(ident: &str) -> Option<Expr> {
             ctx: ctx; [] => { println!("{:#?}", ctx.env); Expr::Nil }
         },
         "bye" => Func::new_expr(|_, _| Err(QxErr::Stop)),
-        "fatal" => func_expr! { [expr] =>
+        "fatal" => func_expr! {"fatal"; [expr] =>
             // return the lisp value expr as a fatal error
             Err(QxErr::Fatal(Box::new(QxErr::LispErr(expr.clone()))))?
         },
-        "atom" => func_expr! { [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },
-        "atom?" => func_expr!([expr] => Expr::Bool(matches!(expr, Expr::Atom(_)))),
-        "deref" => func_expr! { [Expr::Atom(it)] => it.borrow().clone() },
-        "reset!" => func_expr! { [Expr::Atom(atom), new] => atom.replace(new.clone()) },
+        "atom" => func_expr! {"atom"; [expr] => Expr::Atom(Rc::new(RefCell::new(expr.clone()))) },
+        "atom?" => func_expr! { "atom?";[expr] => Expr::Bool(matches!(expr, Expr::Atom(_))) },
+        "deref" => func_expr! { "deref"; [Expr::Atom(it)] => it.borrow().clone() },
+        "reset!" => func_expr! {"reset!"; [Expr::Atom(atom), new] => atom.replace(new.clone()) },
         "swap!" => func_expr! {ctx:ctx; [Expr::Atom(atom), cl @ Expr::Closure(_), args@..] => {
             let mut expr = vec![cl.clone(), atom.take()];
 
@@ -201,7 +220,7 @@ pub fn builtins(ident: &str) -> Option<Expr> {
 
             res
         } },
-        "throw" => func_expr! { [expr] => Err(QxErr::LispErr(expr.clone()))? },
+        "throw" => func_expr! {"throw"; [expr] => Err(QxErr::LispErr(expr.clone()))? },
         _ => None?,
     })
 }

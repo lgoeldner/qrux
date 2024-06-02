@@ -93,5 +93,48 @@
 					(cons 'cond next)
 					nil))))
 
+(defun! dbg (it)
+	(do
+		(prn it)
+		it))
+
+(defun! __do-range (from to acc)
+	(if (from \< to)
+		(__do-range (from \+ 1) to (cons from acc))
+		(rev acc)))
+
+(defun! range (from to)
+	(__do-range from to '()))
+
+
+(defmacro! newenv (&to-do)
+	`(let* () (do ~to-do)))
+
+(defun! cadr (it)
+	(car (cdr it)))
+
+(defun! timeit (it)
+	(let* (
+		now (time)
+		res (it)
+		elapsed (- (time) now)
+		_ (println (str "Result: " it " took " elapsed "ms")))
+
+		res))
+
+(defmacro! timed (it)
+	`(timeit (fn* () ,it)))
+
+(defun! _ (drop)
+	nil)
+
+(mexp timeit (range 0 10000))
+
+
+
+
+;; load the provided file
 (if (= 1 (count *ARGS*))
-	(loadf (car *ARGS*))))
+	(do
+		(println (str "loading file: " (car *ARGS*)))
+		(loadf (car *ARGS*)))))

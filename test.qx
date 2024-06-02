@@ -1,7 +1,3 @@
-(defun! range (from to)
-	(if (< from to)
-		(cons from (range (from \+ 1) to))
-		'()))
 
 (val! -> range)
 (val! <- (swap ->))
@@ -21,7 +17,7 @@
 
 ;;; partially applies some arguments to a function
 (defun! part (fun &args)
-	(fn* (&rest) (eval `(,fun ~args ~rest))))
+	(fn* (&rest) `(apply ,fun ~args ~rest)))
 
 (defmacro! apply (&args)
 	(let* (last ((count args) \- 1))
@@ -29,3 +25,25 @@
 			`(,(car args) ; first function
 				~(slice 1 last args) ; rest of the arguments
 				~(nth last args))))) ; arguments provided in a list
+
+(defun! filter (pred list)
+	(newenv 
+		(defun! __do-filter (pred list acc)
+			(if (nil? list)
+				acc
+				(__do-filter 
+					pred 
+					(cdr list)
+					(if (pred (car list))
+						(cons (car list) acc)
+						acc))))
+		(__do-filter pred list '())))
+
+(defun! testpred (it)
+	(> 5 (dbg it)))
+
+(defun! count_atoms (sym in)
+	(filter (part = sym)
+		 (filter 
+		 sym?
+		 (dbg in))))
