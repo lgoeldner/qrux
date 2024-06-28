@@ -1,6 +1,7 @@
 use core::fmt;
+use std::rc::Rc;
 
-use crate::read::{Closure, Expr};
+use crate::read::{Closure, ConsCell, Expr};
 use colored::Colorize;
 
 pub fn pp_ast(ast: &Expr) {
@@ -27,6 +28,25 @@ impl std::fmt::Display for Expr {
             write!(f, ")")
         }
 
+        fn write_cons_inner(f: &mut fmt::Formatter, list: Rc<ConsCell>) -> fmt::Result {
+            match &*list {
+                ConsCell {
+                    car: ref car,
+                    cdr: None,
+                } => car.fmt(f),
+
+                ConsCell {
+                    car,
+                    cdr: Some(ref cdr),
+                } => {
+                    car.fmt(f)?;
+                    write!(f, " ")?;
+
+                    write_cons_inner(f, cdr.clone())
+                }
+            }
+        }
+
         if f.alternate() {
             match self {
                 Self::Atom(it) => format!("{:#}", it.borrow()).fmt(f),
@@ -37,6 +57,13 @@ impl std::fmt::Display for Expr {
                 Self::Nil => "nil".fmt(f),
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
+                Self::Cons(it) => {
+                    write!(f, "{{")?;
+                    it.as_ref()
+                        .map(|it| write_cons_inner(f, it.clone()))
+                        .transpose()?;
+                    write!(f, "}}")
+                }
             }
         } else {
             match self {
@@ -49,6 +76,13 @@ impl std::fmt::Display for Expr {
                 Self::Func(_) => "<Func>".red().fmt(f),
                 Self::Closure(c) => c.to_string().red().fmt(f),
                 Self::Bool(b) => b.to_string().bright_blue().fmt(f),
+                Self::Cons(it) => {
+                    write!(f, "{{")?;
+                    it.as_ref()
+                        .map(|it| write_cons_inner(f, it.clone()))
+                        .transpose()?;
+                    write!(f, "}}")
+                }
             }
         }
     }

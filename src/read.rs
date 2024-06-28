@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -51,7 +53,7 @@ pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<Expr> {
 
 #[allow(dead_code)]
 pub(crate) fn from_string(s: std::rc::Rc<str>) -> PResult<Expr> {
-	Input(s).tokenize().try_into()
+    Input(s).tokenize().try_into()
 }
 
 impl TryFrom<TokenStream<'_>> for Expr {
@@ -149,12 +151,19 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
 
             list.swap(len - 1, len - 2);
 
-            // list.insert(list.len() - 2, next);
             continue;
         }
 
         list.push(parse_atom(stream)?);
     }
 
-    Ok(Expr::List(list.into()))
+    let y = list.iter().rev().fold(None, |acc, it| {
+        Some(Rc::new(ConsCell {
+            car: it.clone(),
+            cdr: acc,
+        }))
+    });
+
+    // Ok(Expr::List(list.into()))
+    Ok(Expr::Cons(y))
 }

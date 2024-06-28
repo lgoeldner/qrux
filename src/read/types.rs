@@ -20,9 +20,17 @@ pub enum Expr {
     Sym(Rc<str>),
     List(Rc<[Expr]>),
     Bool(bool),
+    Cons(Option<Rc<ConsCell>>),
     #[default]
     Nil,
 }
+
+#[derive(Clone, Eq, PartialEq, Default)]
+pub struct ConsCell {
+    pub car: Expr,
+    pub cdr: Option<Rc<ConsCell>>,
+}
+
 
 #[derive(Error, Debug)]
 pub enum QxErr {

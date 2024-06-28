@@ -173,19 +173,19 @@ pub fn str_builtins(ident: &str) -> Option<Expr> {
             func_expr! {"str:len"; [Expr::String(s)] =>
             Expr::Int(s.len().try_into().map_err(|it: TryFromIntError| QxErr::Any(it.into()))?) }
         }
-        "str:slice" => {
-            func_expr! {"str:slice";
-                [Expr::Int(from), Expr::Int(to), Expr::String(s)] =>
-                     s.get(*from as usize..*to as usize).map_or(Expr::Nil, |it| Expr::String(it.into()))
-            }
-        }
+        "str:slice" => func_expr! {"str:slice";
+            [Expr::Int(from), Expr::Int(to), Expr::String(s)] =>
+                 s.get(*from as usize..*to as usize).map_or(Expr::Nil, |it| Expr::String(it.into()))
+        },
+
         "sym" => func_expr! {"sym";
-            [Expr::String(s) | Expr::Sym(s)] => 
-			if !s.contains(' ') { 
-				Expr::Sym(Rc::clone(s))
-			} else { 
-				Err(QxErr::Any(anyhow!("\"{s}\" may not be converted to a symbol!")))?
-			}
+            [Expr::String(s) | Expr::Sym(s)] =>
+            if s.contains(' ') {
+                Err(QxErr::Any(anyhow!("\"{s}\" may not be converted to a symbol!")))?
+
+            } else {
+                Expr::Sym(Rc::clone(s))
+            }
         },
         _ => None?,
     })
@@ -207,9 +207,9 @@ pub fn builtins(ident: &str) -> Option<Expr> {
         "sym?" => {
             func_expr! {"sym?"; [maybe_sym] => Expr::Bool(matches!(maybe_sym, Expr::Sym(_))) }
         }
-        "read-string" => {
-            func_expr! {"read-string"; [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()? }
-        }
+        "read-string" => func_expr! {"read-string";
+            [Expr::String(s)] => read::Input(Rc::clone(s)).tokenize().try_into()?
+        },
         "slurp" => func_expr! {"slurp"; [Expr::String(s)] => {
                  Expr::String(
                     std::fs::read_to_string(s as &str).map_err(|err| QxErr::Any(err.into()))?.into()
