@@ -225,6 +225,6 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
 
         list.push(parse_atom(stream)?);
     }
-
+    
     Ok(Expr::List(list))
 }
