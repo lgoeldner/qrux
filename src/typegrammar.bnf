@@ -1,0 +1,12 @@
+<Type> ::= "?" <NonNull> | <NonNull>
+<NonNull> ::= 
+        "Int"
+        | "Bool"
+        | "String"
+        | "{" <Type> "}" // Typed List, _ for untyped
+        | "Sym"
+        | "Fn"
+        | "_"
+        // with sum types:
+        | <SumType>
+<SumType> ::= <NonNull> ("|" <NonNull>)+

@@ -1,26 +1,140 @@
 (do
 
-(def! not 
-(fn* (bool) 
-	(if bool 
-		false 
-		true)))
+(val! t true)
 
-(def! test 
-	  true)
+(defmacro! defun! (ident args body)
+	`(val! ,ident (fn* ,args ,body)))
 
-(def! loadf
-(fn* (path)
-	(eval 
-		(read-string
-			(str "(do"
-				(slurp path) ")" )))))
+(defmacro! when (cond &body)
+	`(if ,cond (do ~body)))
 
-(def! re
-	(fn* (string)
-		(eval 
-			(read-string string))))
+;;; Boolean Operators
+(defun! not (bool)
+	(if bool
+		false
+		true))
+
+; macro for short circuiting
+(defmacro! and (lhs rhs)
+	`(if ,lhs
+		(if ,rhs
+			true
+			false)
+		false))
+
+(defmacro! or (lhs rhs)
+	`(if ,lhs
+		false
+		(if ,rhs
+			true
+			false)))
+
+(val! | or)
+(val! & and)
+(val! ! not)
+
+(defun! rep (str)
+	(eval
+		(read-string str)))
+
+; load a file and execute it with a do block wrapped around
+(defun! loadf (path)
+	(rep
+		(str 
+			"(do" 
+			(slurp path)
+			")")))
+
+; returns a curried function
+; swaps the order of two arguments
+(defun! swap (func) (fn* (a b) (func b a)))
+
+(defun! append (el to)
+	(concat to (list el)))
+
+(defun! nil? (it)
+	(= nil it))
+
+(val! lt <)
+(val! gt >)
+(val! eq =)
+
+(defmacro! := (atom set_to)
+	`(do (reset! ,atom ,set_to) nil))
+
+(defmacro! assert (cond)
+	`(if (= ,cond true)
+		nil ; nil if the assertion holds
+		(throw 
+			(str "Assertion Failed: " ',cond))))
+
+(defmacro! assert-or (cond error)
+	`(if (= ,cond true)
+		nil ; nil if the assertion holds
+		(throw error))) ; else throw the error
+
+(defun! unwrap (it)
+	(if (= nil it)
+		(throw "Non-nil Assertion failed!")
+		it))
+
+(defun! todo (message)
+	(throw (str "Not yet implemented: " message)))
+
+(defmacro! cond (&args)
+	(let* ( 
+			first (car args)
+			condition (car first)
+			expr (nth 1 first)
+			next (cdr args))
+			`(if ,condition
+				,expr
+				,(if next
+					(cons 'cond next)
+					nil))))
+
+(defun! dbg (it)
+	(do
+		(prn it)
+		it))
+
+(defun! __do-range (from to acc)
+	(if (from \< to)
+		(__do-range (from \+ 1) to (cons from acc))
+		(rev acc)))
+
+(defun! range (from to)
+	(__do-range from to '()))
+
+
+(defmacro! newenv (&to-do)
+	`(let* () (do ~to-do)))
+
+(defun! cadr (it)
+	(car (cdr it)))
+
+(defun! timeit (it)
+	(let* (
+		now (time)
+		res (it)
+		elapsed (- (time) now)
+		_ (println (str "Result: " it " took " elapsed "ms")))
+
+		res))
+
+(defmacro! timed (it)
+	`(timeit (fn* () ,it)))
+
+(defun! _ (drop)
+	nil)
+
+(mexp timeit (range 0 10000))
 
 
 
-)
+
+;; load the provided file
+(if (= 1 (count *ARGS*))
+	(do
+		(println (str "loading file: " (car *ARGS*)))
+		(loadf (car *ARGS*)))))

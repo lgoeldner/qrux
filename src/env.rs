@@ -1,18 +1,18 @@
+use core::str_builtins;
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::{Rc, Weak};
+use std::rc::Rc;
 
-use crate::read::{Expr, QxErr};
+use crate::read::Expr;
 
-use self::core::{builtins, cmp_ops, int_ops};
+use self::core::{builtins, cmp_ops, int_ops, list_builtins};
 
 mod core;
 
 #[derive(Clone, Default)]
 pub struct Inner {
-    outer: Option<Env>,
-    data: RefCell<HashMap<String, Expr>>,
-    // selfref: Weak<Inner>,
+    pub(crate) outer: Option<Env>,
+    pub(crate) data: RefCell<HashMap<Rc<str>, Expr>>,
 }
 
 impl std::fmt::Debug for Inner {
@@ -29,57 +29,26 @@ pub struct Env(Rc<Inner>);
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        // println!(
-        //     "dropping inner TODO, {:?}, {:?}",
-        //     self.data,
-        //     self.outer.as_ref().map(|it| &it.0.data)
-        // );
+        // TODO: solve memory leak when env is created with a closure capturing the env,
+        // creating a reference cycle
     }
 }
 
 fn core_map(inp: &str) -> Option<Expr> {
-    int_ops(inp)
+    builtins(inp)
         .or_else(|| cmp_ops(inp))
-        .or_else(|| builtins(inp))
+        .or_else(|| int_ops(inp))
+        .or_else(|| list_builtins(inp))
+		.or_else(|| str_builtins(inp))
 }
 
 impl Inner {
     #[must_use]
     pub fn new_env(outer: Option<Env>) -> Env {
-        Env(Rc::new_cyclic(|cycle| Self {
+        Env(Rc::new(Self {
             outer,
             data: RefCell::default(),
-            // selfref: cycle.clone(),
         }))
-    }
-
-    pub fn with_outer_args(
-        outer: Env,
-        args: &[Expr],
-        argsident: &[impl AsRef<str>],
-    ) -> Result<Env, QxErr> {
-        let env = Self::with_outer(outer);
-
-        if argsident.len() != args.len() {
-            return Err(QxErr::TypeErr {
-                expected: Expr::List(
-                    argsident
-                        .iter()
-                        .map(|it| Expr::Sym(it.as_ref().to_owned()))
-                        .collect::<Vec<_>>(),
-                ),
-                found: Expr::List(args.to_vec()),
-            });
-        }
-
-        for (arg, ident) in args.iter().zip(argsident) {
-            env.0
-                .data
-                .borrow_mut()
-                .insert(ident.as_ref().to_string(), arg.clone());
-        }
-
-        Ok(env)
     }
 
     #[must_use]
@@ -93,6 +62,21 @@ impl Inner {
 }
 
 impl Env {
+    #[must_use]
+    pub fn with_outer(outer: Self) -> Self {
+        Inner::new_env(Some(outer))
+    }
+
+    pub(crate) fn inner(&self) -> Rc<Inner> {
+        self.0.clone()
+    }
+
+    #[allow(clippy::must_use_candidate)]
+    pub fn remove(&self, ident: &str) -> Option<Expr> {
+        self.0.data.borrow_mut().remove(ident)
+    }
+
+    #[must_use]
     pub fn get(&self, ident: &str) -> Option<Expr> {
         self.find(ident).map_or_else(
             || core_map(ident),
@@ -100,11 +84,12 @@ impl Env {
         )
     }
 
-    pub fn set(&self, ident: &str, val: Expr) {
-        self.0.data.borrow_mut().insert(ident.to_owned(), val);
+    pub fn set(&mut self, ident: &Rc<str>, val: Expr) {
+        self.0.data.borrow_mut().insert(Rc::clone(ident), val);
     }
 
-    pub fn find(&self, ident: &str) -> Option<Env> {
+    #[must_use]
+    pub fn find(&self, ident: &str) -> Option<Self> {
         // check if self contains the key,
         self.0
             .data
