@@ -22,6 +22,10 @@ macro_rules! expr {
         $crate::Expr::List(::std::rc::Rc::new([$($it), *]))
     };
 
+    (cons $($it:expr),*) => {
+        $crate::read::types::cons_from_list(&[$($it), *])
+    };
+
     (nil) => {
         $crate::Expr::Nil
     };

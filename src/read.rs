@@ -107,7 +107,7 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
             )
         }
 
-        string if (string.starts_with('"')) => {
+        string if string.starts_with('"') => {
             if string.len() == 1 || !string.ends_with('"') {
                 return Err(QxErr::MissingToken(anyhow!("Second String delimiter")));
             }
@@ -121,7 +121,6 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
             )
         }
         sym => expr!(sym sym),
-        // sym => Expr::Sym(sym.to_string()),
     })
 }
 
@@ -136,7 +135,6 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
 
         // infix operator, swaps the order of the last and next expressions
         // expressions to allow things like (10 \+ 10)
-        // more readable than (+ 10 10)
         if stream.peek() == Some(r"\") {
             stream.next();
             let op = parse_atom(stream)?;
@@ -157,13 +155,6 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         list.push(parse_atom(stream)?);
     }
 
-    let y = list.iter().rev().fold(None, |acc, it| {
-        Some(Rc::new(ConsCell {
-            car: it.clone(),
-            cdr: acc,
-        }))
-    });
-
     // Ok(Expr::List(list.into()))
-    Ok(Expr::Cons(y))
+    Ok(Expr::Cons(cons_from_list(&list)))
 }

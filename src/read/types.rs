@@ -20,9 +20,23 @@ pub enum Expr {
     Sym(Rc<str>),
     List(Rc<[Expr]>),
     Bool(bool),
-    Cons(Option<Rc<ConsCell>>),
+    Cons(Cons),
     #[default]
     Nil,
+}
+
+#[derive(Clone, Eq, PartialEq, Default)]
+pub struct Cons(pub Option<Rc<ConsCell>>);
+
+impl From<&[Expr]> for Cons {
+    fn from(list: &[Expr]) -> Self {
+        Self(list.iter().rev().fold(None, |acc, it| {
+            Some(Rc::new(ConsCell {
+                car: it.clone(),
+                cdr: acc,
+            }))
+        }))
+    }
 }
 
 #[derive(Clone, Eq, PartialEq, Default)]
@@ -31,6 +45,28 @@ pub struct ConsCell {
     pub cdr: Option<Rc<ConsCell>>,
 }
 
+pub struct ConsIter {
+    head: Cons,
+}
+
+impl IntoIterator for Cons {
+    type Item = Expr;
+    type IntoIter =
+        impl Iterator<Item = read::types::Expr>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        std::iter::successors(self.0, |item| item.cdr).map(|it| it.car)
+    }
+}
+
+// pub fn cons_from_list(list: &[Expr]) -> Option<Rc<ConsCell>> {
+//     list.iter().rev().fold(None, |acc, it| {
+//         Some(Rc::new(ConsCell {
+//             car: it.clone(),
+//             cdr: acc,
+//         }))
+//     })
+// }
 
 #[derive(Error, Debug)]
 pub enum QxErr {

@@ -78,7 +78,7 @@ impl std::fmt::Display for Expr {
                 Self::Bool(b) => b.to_string().bright_blue().fmt(f),
                 Self::Cons(it) => {
                     write!(f, "{{")?;
-                    it.as_ref()
+                    it.0.as_ref()
                         .map(|it| write_cons_inner(f, it.clone()))
                         .transpose()?;
                     write!(f, "}}")
