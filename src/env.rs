@@ -1,13 +1,16 @@
-use core::str_builtins;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::read::Expr;
 
-use self::core::{builtins, cmp_ops, int_ops, list_builtins};
 
-mod core;
+// mod core;
+// pub use core::core_map;
+fn core_map(_: &str) -> Option<Expr> {
+	None
+}
+
 
 #[derive(Clone, Default)]
 pub struct Inner {
@@ -34,13 +37,6 @@ impl Drop for Inner {
     }
 }
 
-fn core_map(inp: &str) -> Option<Expr> {
-    builtins(inp)
-        .or_else(|| cmp_ops(inp))
-        .or_else(|| int_ops(inp))
-        .or_else(|| list_builtins(inp))
-		.or_else(|| str_builtins(inp))
-}
 
 impl Inner {
     #[must_use]

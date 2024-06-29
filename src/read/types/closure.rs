@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use crate::{env::Env, expr};
 
-use super::{Expr, QxErr};
+use super::{Cons, Expr, QxErr};
 
 #[derive(Clone, Debug)]
 pub struct Closure {
@@ -30,57 +30,56 @@ impl Closure {
         }
     }
 
-    fn load_varargs(&self, args: &[Expr], env: Env) -> Env {
-        // load normal args
-        for (arg, ident) in args[..self.args_name.len() - 1]
-            .iter()
-            .zip(self.args_name.iter())
-        {
-            env.inner()
-                .data
-                .borrow_mut()
-                .insert(ident.clone(), arg.clone());
-        }
+    // fn load_varargs(&self, args: Cons, env: Env) -> Env {
+    //     // load normal args
+    //     for (arg, ident) in args[..self.args_name.len() - 1]
+    //         .iter()
+    //         .zip(self.args_name.iter())
+    //     {
+    //         env.inner()
+    //             .data
+    //             .borrow_mut()
+    //             .insert(ident.clone(), arg.clone());
+    //     }
 
-        // insert variadic args
-        env.inner().data.borrow_mut().insert(
-            self.args_name.last().unwrap()[1..].to_owned().into(),
-            Expr::List(args[self.args_name.len() - 1..].into()),
-        );
+    //     // insert variadic args
+    //     env.inner().data.borrow_mut().insert(
+    //         self.args_name.last().unwrap()[1..].to_owned().into(),
+    //         Expr::List(args[self.args_name.len() - 1..].into()),
+    //     );
 
-        env
-    }
+    //     env
+    // }
 
-    pub fn create_env(&self, args: &[Expr]) -> Result<Env, QxErr> {
+    pub fn create_env(&self, args: Cons) -> Result<Env, QxErr> {
         let env = Env::with_outer(self.captured.clone());
         let has_varargs = matches!(self.args_name.last(), Some(s) if s.starts_with('&'));
 
+        let mut names = self.args_name.into_iter().peekable();
+        let mut args = args;
 
-        if (!has_varargs && self.args_name.len() != args.len())
-            || (has_varargs && self.args_name.len() > args.len())
-        {
-            return Err(QxErr::TypeErr {
-                expected: Box::new(Expr::List(
-                    self.args_name
-                        .iter()
-                        .map(|it| expr!(sym it.as_ref()))
-                        .collect::<Rc<[_]>>(),
-                )),
-                found: Box::new(Expr::List(args.into())),
-            });
-        }
+        let insert_env = |it, to| env.inner().data.borrow_mut().insert(it, to);
 
-        if has_varargs {
-            Ok(self.load_varargs(args, env))
-        } else {
-            for (arg, ident) in args.iter().zip(self.args_name.iter()) {
-                env.inner()
-                    .data
-                    .borrow_mut()
-                    .insert(ident.clone(), arg.clone());
+        loop {
+            let name = match names.next() {
+                Some(name) => name,
+                None => break,
+            };
+
+            if names.peek().is_none() && has_varargs {
+                insert_env(name[1..].into(), Expr::Cons(args.clone()));
+
+                break;
             }
 
-            Ok(env)
+            insert_env(name.clone(), args.car().unwrap());
+
+            args = match args.cdr_opt() {
+                Some(args) => args,
+                None => return Err(QxErr::NoArgs(None)),
+            };
         }
+
+        Ok(env)
     }
 }

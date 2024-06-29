@@ -10,6 +10,8 @@ pub mod closure;
 pub mod typing;
 pub use closure::Closure;
 
+/// cheap to clone, only contains small values (with copy)
+/// or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
     Atom(Rc<RefCell<Expr>>),
@@ -28,9 +30,56 @@ pub enum Expr {
 #[derive(Clone, Eq, PartialEq, Default)]
 pub struct Cons(pub Option<Rc<ConsCell>>);
 
-impl From<&[Expr]> for Cons {
-    fn from(list: &[Expr]) -> Self {
-        Self(list.iter().rev().fold(None, |acc, it| {
+#[derive(Clone, Eq, PartialEq, Default)]
+pub struct ConsCell {
+    pub car: Expr,
+    pub cdr: Option<Rc<ConsCell>>,
+}
+
+#[derive(Clone)]
+pub struct ConsIter {
+    head: Option<Rc<ConsCell>>,
+}
+
+impl ConsIter {
+    pub fn rest(self) -> Cons {
+        Cons(self.head)
+    }
+}
+
+impl Cons {
+    pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
+        let inner = iter.rev().fold(None, |acc, it| {
+            Some(Rc::new(ConsCell { car: it, cdr: acc }))
+        });
+
+        Cons(inner)
+    }
+
+    pub fn car(&self) -> Option<Expr> {
+        self.0.as_ref().map(|it| it.car.clone())
+    }
+
+    pub fn cdr_opt(&self) -> Option<Cons> {
+        self.0.as_ref().map(|it| Cons(it.cdr.clone()))
+    }
+
+    pub fn nth(&self, n: usize) -> Option<Expr> {
+        match n {
+            0 => self.car(),
+            _ => self.cdr().nth(n - 1),
+        }
+    }
+
+    /// cdr except it returns an empty Cons instead of an Option::None
+    pub fn cdr(&self) -> Cons {
+        Cons(self.0.as_ref().map(|it| it.cdr.clone()).flatten())
+    }
+}
+
+impl<T: AsRef<[Expr]>> From<T> for Cons {
+    fn from(list: T) -> Self {
+        Self(list.as_ref().iter().rev().fold(None, |acc, it| {
             Some(Rc::new(ConsCell {
                 car: it.clone(),
                 cdr: acc,
@@ -39,34 +88,34 @@ impl From<&[Expr]> for Cons {
     }
 }
 
-#[derive(Clone, Eq, PartialEq, Default)]
-pub struct ConsCell {
-    pub car: Expr,
-    pub cdr: Option<Rc<ConsCell>>,
+impl Iterator for ConsIter {
+    type Item = Expr;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let old_head = self.head.take();
+
+        self.head = old_head.as_ref().map(|it| it.cdr.clone()).flatten();
+
+        old_head.map(|it| it.car.clone())
+    }
 }
 
-pub struct ConsIter {
-    head: Cons,
+impl FromIterator<Expr> for Cons {
+    fn from_iter<T: IntoIterator<Item = Expr>>(iter: T) -> Self {
+        let v = iter.into_iter().collect::<Vec<_>>();
+
+        Self::from(v)
+    }
 }
 
 impl IntoIterator for Cons {
     type Item = Expr;
-    type IntoIter =
-        impl Iterator<Item = read::types::Expr>;
+    type IntoIter = ConsIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        std::iter::successors(self.0, |item| item.cdr).map(|it| it.car)
+        ConsIter { head: self.0 }
     }
 }
-
-// pub fn cons_from_list(list: &[Expr]) -> Option<Rc<ConsCell>> {
-//     list.iter().rev().fold(None, |acc, it| {
-//         Some(Rc::new(ConsCell {
-//             car: it.clone(),
-//             cdr: acc,
-//         }))
-//     })
-// }
 
 #[derive(Error, Debug)]
 pub enum QxErr {

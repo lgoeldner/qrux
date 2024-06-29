@@ -7,9 +7,9 @@ use std::path::PathBuf;
 use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::{Env, Inner};
-use read::{Expr, PResult, QxErr};
+use read::{Cons, Expr, PResult, QxErr};
 
-type FuncT = fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>;
+type FuncT = fn(&mut Runtime, Cons) -> Result<Expr, read::QxErr>;
 
 pub struct Runtime {
     repl: Term,
@@ -41,11 +41,11 @@ pub struct Term {
 }
 
 impl Func {
-    pub fn apply(&self, ctx: &mut Runtime, args: &[Expr]) -> Result<Expr, read::QxErr> {
+    pub fn apply(&self, ctx: &mut Runtime, args: Cons) -> Result<Expr, read::QxErr> {
         self.0(ctx, args)
     }
 
-    pub fn new_expr(f: fn(&mut Runtime, &[Expr]) -> Result<Expr, read::QxErr>) -> Expr {
+    pub fn new_expr(f: FuncT) -> Expr {
         Expr::Func(Self(f))
     }
 }

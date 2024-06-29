@@ -10,6 +10,15 @@ use crate::lazy::Lazy;
 use crate::read::Expr;
 use crate::{expr, read, Func, QxErr};
 
+
+pub fn core_map(inp: &str) -> Option<Expr> {
+    builtins(inp)
+        .or_else(|| cmp_ops(inp))
+        .or_else(|| int_ops(inp))
+        .or_else(|| list_builtins(inp))
+		.or_else(|| str_builtins(inp))
+}
+
 macro_rules! func_expr {
     // handles argument matching and returning
     ($name:literal; $args_pat:pat => $exp:expr) => {

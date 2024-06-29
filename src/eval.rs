@@ -1,7 +1,7 @@
 use crate::env::Env;
 use crate::read::types::closure::Closure;
 use crate::read::{Cons, ConsCell};
-use crate::{expr, Apply};
+use crate::{expr, Apply, Func};
 use crate::{
     read::{Expr, QxErr},
     Runtime,
@@ -65,8 +65,8 @@ impl Runtime {
             match ast {
                 Expr::Cons(Cons(None)) => return Ok(ast),
 
-                Expr::Cons(Cons(Some(list))) => {
-                    let ident = &list.car;
+                Expr::Cons(list @ Cons(Some(_))) => {
+                    let ident = &list.car().ok_or(QxErr::NoArgs(None))?;
 
                     match self.apply(ident, list.clone(), env.clone()) {
                         ControlFlow::Break(res) => return res,
@@ -90,14 +90,67 @@ impl Runtime {
     fn apply(
         &mut self,
         ident: &Expr,
-        lst: Rc<ConsCell>,
+        lst: Cons,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let Expr::Sym(ref ident) = ident else {
-            return self.apply_func(Expr::Cons(Cons(Some(lst))), env);
+            return self.apply_func(Expr::Cons(lst), env);
         };
 
+        let xs = lst.cdr();
+        let mut xs_iter = xs.clone().into_iter();
+
         match ident as &str {
+            "quote" => ControlFlow::Break(xs.car().ok_or(QxErr::NoArgs(None))),
+
+            "val!" => {
+                let Some(Expr::Sym(ident)) = xs.car() else {
+                    err!(form: "(val! <sym> <expr>)")
+                };
+
+                let Some(expr) = xs.cdr().car() else {
+                    err!(form: "(val! <sym> <expr>)")
+                };
+
+                ControlFlow::Break(self.defenv(&ident, &expr, env))
+            }
+
+            "defmacro!" => {
+                let Some(Expr::Sym(ident)) = xs_iter.next() else {
+                    err!(form: "(defmacro! <name> <args> <body>)")
+                };
+
+                let Some(Expr::Cons(args)) = xs_iter.next() else {
+                    err!(form: "(defmacro! <name> <args> <body>)")
+                };
+
+                let Some(body) = xs_iter.next() else {
+                    err!(form: "(defmacro! <name> <args> <body>)")
+                };
+
+                let closure = self.create_closure(&env, args, &body, true);
+                match closure {
+                    ControlFlow::Break(Ok(Expr::Closure(cl))) => {
+                        self.env.set(&ident, Expr::Closure(cl));
+                        break_ok!(expr!(nil))
+                    }
+
+                    _ => unreachable!(),
+                }
+            }
+
+            // ("defmacro!", [Expr::Sym(ident), Expr::List(args), body]) => {
+            //     let closure = self.create_closure(&env, args, body, true);
+            //     match closure {
+            //         ControlFlow::Break(Ok(Expr::Closure(cl))) => {
+            //             self.env.set(ident, Expr::Closure(cl));
+            //             break_ok!(expr!(nil))
+            //         }
+
+            //         _ => unreachable!(),
+            //     }
+            // }
+            // ("defmacro!", _) => err!(form: "(defmacro! <name> <args> <body>)"),
             // ("val!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
             // ("val!", _) => err!(form: "(val! <sym> <expr>)"),
 
@@ -123,19 +176,6 @@ impl Runtime {
             //     .unwrap_or(Expr::Nil)
             //     .apply(Ok)
             //     .apply(ControlFlow::Break),
-
-            // ("defmacro!", [Expr::Sym(ident), Expr::List(args), body]) => {
-            //     let closure = self.create_closure(&env, args, body, true);
-            //     match closure {
-            //         ControlFlow::Break(Ok(Expr::Closure(cl))) => {
-            //             self.env.set(ident, Expr::Closure(cl));
-            //             break_ok!(expr!(nil))
-            //         }
-
-            //         _ => unreachable!(),
-            //     }
-            // }
-            // ("defmacro!", _) => err!(form: "(defmacro! <name> <args> <body>)"),
 
             // ("mexp", ast @ [Expr::Sym(_), ..]) => {
             //     ControlFlow::Break(self.macroexpand(Expr::List(ast.into()), &env))
@@ -192,7 +232,7 @@ impl Runtime {
 
             //     ControlFlow::Break(Ok(Expr::List(early_ret!(res).into())))
             // }
-            _ => self.apply_func(Expr::Cons(Cons(Some(lst))), env),
+            _ => self.apply_func(Expr::Cons(lst), env),
         }
     }
 
@@ -284,14 +324,14 @@ impl Runtime {
     fn create_closure(
         &mut self,
         env: &Option<Env>,
-        args: &[Expr],
+        args: Cons,
         body: &Expr,
         is_macro: bool,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let args = args
-            .iter()
+            .into_iter()
             .map(|it| match it {
-                Expr::Sym(s) => Ok(Rc::clone(s)),
+                Expr::Sym(s) => Ok(Rc::clone(&s)),
                 _ => Err(QxErr::Any(anyhow!("Not a symbol: {it:?}"))),
             })
             .collect::<Result<_, _>>();
@@ -312,21 +352,21 @@ impl Runtime {
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let new = match self.replace_eval(ast, env) {
-            Ok(Expr::List(new)) => new,
+            Ok(Expr::Cons(new)) => new,
             Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
             Err(e) => return err!(break e),
         };
 
-        match &*new {
-            [Expr::Func(func), args @ ..] => ControlFlow::Break(func.apply(self, args)),
+        match new.car() {
+            Some(Expr::Func(func)) => ControlFlow::Break(Func::apply(&func, self, new.cdr())),
 
-            [Expr::Closure(cl), args @ ..] => ControlFlow::Continue(EvalTco {
+            Some(Expr::Closure(cl)) => ControlFlow::Continue(EvalTco {
                 ast: *cl.body.clone(),
-                env: Some(early_ret!(cl.create_env(args))),
+                env: Some(early_ret!(cl.create_env(new.cdr()))),
             }),
 
-            [err, ..] => err!(break "Not a Function: {err:?}"),
-            [] => err!(break QxErr::NoArgs(None)),
+            Some(err) => err!(break "Not a Function: {err:?}"),
+            None => err!(break QxErr::NoArgs(None)),
         }
     }
 
@@ -353,26 +393,26 @@ impl Runtime {
                 .or_else(|| is_special_form(&sym).then_some(expr!(sym sym.clone())))
                 .context(format!("Unbound identifier [ {sym} ]"))?,
 
-            Expr::Cons(l) => Expr::List(
-                l.iter()
+            Expr::Cons(l) => Expr::Cons({
+                l.into_iter()
                     .map(|it| self.eval(it.clone(), env.clone()))
-                    .collect::<Result<_, _>>()?,
-            ),
+                    .collect::<Result<_, _>>()?
+            }),
             val => val,
         })
     }
 
-    /// Returns the macro and args to it,
-    /// if the AST is a list, whose first element is a macro in the environment
+    /// Returns the macro and args to it
+    /// if the AST is a list, whose first element is a macro
     fn is_macro_call<'a>(
         &mut self,
         ast: &'a Expr,
         env: &Option<Env>,
-    ) -> Option<(Rc<Closure>, &'a [Expr])> {
-        if let Expr::List(lst) = ast {
-            if let [Expr::Sym(sym), ..] = &**lst {
-                match env.as_ref().unwrap_or(&self.env).get(sym) {
-                    Some(Expr::Closure(cl)) => cl.is_macro.then_some((cl, &lst[1..])),
+    ) -> Option<(Rc<Closure>, Cons)> {
+        if let Expr::Cons(lst) = ast {
+            if let Some(Expr::Sym(sym)) = lst.car() {
+                match env.as_ref().unwrap_or(&self.env).get(&sym) {
+                    Some(Expr::Closure(cl)) => cl.is_macro.then_some((cl, lst.cdr())),
                     _ => None,
                 }
             } else {

@@ -87,9 +87,9 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
         // reader macros //
-        "'" => expr!(list expr!(quote), parse_atom(stream)?),
-        "@" => expr!(list expr!(deref), parse_atom(stream)?),
-        "!!" => expr!(list expr!(atom), parse_atom(stream)?),
+        "'" => expr!(cons expr!(quote), parse_atom(stream)?),
+        "@" => expr!(cons expr!(deref), parse_atom(stream)?),
+        "!!" => expr!(cons expr!(atom), parse_atom(stream)?),
 
         // quasiquoting
         "`" => expr!(list expr!(quasiquote), parse_atom(stream)?),
@@ -156,5 +156,5 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     }
 
     // Ok(Expr::List(list.into()))
-    Ok(Expr::Cons(cons_from_list(&list)))
+    Ok(Expr::Cons(list.into()))
 }
