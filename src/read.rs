@@ -92,9 +92,9 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
         "!!" => expr!(cons expr!(atom), parse_atom(stream)?),
 
         // quasiquoting
-        "`" => expr!(list expr!(quasiquote), parse_atom(stream)?),
-        "~" => expr!(list expr!(sym "splice-unquote"), parse_atom(stream)?),
-        "," => expr!(list expr!(unquote), parse_atom(stream)?),
+        "`" => expr!(cons expr!(quasiquote), parse_atom(stream)?),
+        "~" => expr!(cons expr!(sym "splice-unquote"), parse_atom(stream)?),
+        "," => expr!(cons expr!(unquote), parse_atom(stream)?),
         //--//
         "nil" => Expr::Nil,
         "true" => expr!(bool true),

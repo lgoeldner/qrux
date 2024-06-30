@@ -4,11 +4,14 @@ use std::rc::Rc;
 
 use crate::read::Expr;
 
+mod ll_core;
+pub use ll_core::core_map;
+
 // mod core;
 // pub use core::core_map;
-fn core_map(_: &str) -> Option<Expr> {
-    None
-}
+// fn core_map(_: &str) -> Option<Expr> {
+//     None
+// }
 
 #[derive(Clone, Default)]
 pub struct Inner {

@@ -334,14 +334,14 @@ impl Runtime {
         ast: Expr,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let new = match self.replace_eval(ast, env) {
+        let new = match self.replace_eval(ast, env.clone()) {
             Ok(Expr::Cons(new)) => new,
             Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
             Err(e) => return err!(break e),
         };
 
         match new.car() {
-            Some(Expr::Func(func)) => ControlFlow::Break(Func::apply(&func, self, new.cdr())),
+            Some(Expr::Func(func)) => ControlFlow::Break(Func::apply(&func, self, new.cdr(), env)),
 
             Some(Expr::Closure(cl)) => ControlFlow::Continue(EvalTco {
                 ast: *cl.body.clone(),
@@ -434,9 +434,9 @@ fn is_special_form(sym: &str) -> bool {
             | "catch*"
     )
 }
- 
+
 fn qq_list(elts: Cons) -> Expr {
-	todo!()
+    Expr::String("TODO: qq_list".into())
     // let mut acc = vec![];
     // for elt in elts.into_iter().rev() {
     //     match elt {
