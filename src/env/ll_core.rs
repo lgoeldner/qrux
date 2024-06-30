@@ -1,76 +1,162 @@
-use std::cell::RefCell;
-use std::num::TryFromIntError;
-use std::ops;
-use std::rc::Rc;
-use std::time::SystemTime;
-
-use anyhow::{anyhow, Context};
-
-use crate::lazy::Lazy;
-use crate::read::Expr;
-use crate::{expr, read, Apply, Func, QxErr};
-
 use super::Env;
+use crate::{
+    lazy::Lazy,
+    read::{self, types::*, Cons, Expr},
+    Func,
+};
+use anyhow::{anyhow, Context};
+use std::{cell::RefCell, ops, rc::Rc, time::SystemTime};
 
-pub fn core_map(sym: &str) -> Option<Expr> {
-    int_ops(sym)
-}
+macro_rules! func {
+    ($(env: $env:ident,)? $(ctx: $ctx:ident,)? $name:literal;
+			[$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
+		Func::new_expr($name, |args: Cons, _env, _ctx| {
+				$( let $env = _env;)?
+				$(let $ctx = _ctx;)?
 
-macro_rules! int_operation {
-	(match $ident:ident { $($op:tt => $fun:ident)* } ) => {
-		Some(match $ident {
-			$(
-				stringify!($op) => Func::new_expr(|args, _| {
-					if args.clone().len_is(1) {
-						return Err(QxErr::NoArgs(None));
-					}
+				let mut _iter = args.into_iter();
 
-					args.into_iter()
-						.try_fold(0_i64, |acc, el| {
-							if let Expr::Int(int) = el {
-								acc.$fun(int).ok_or(QxErr::IntOverflowErr)
-							} else {
-								Err(QxErr::TypeErr {
-									expected: read::ExprType::Int,
-									found: el.get_type(),
-								})
-							}
-						})
-						.map(|it| Expr::Int(it))
-				}),
-			)*
-			_ => None?,
-		})
+				$(
+					let Some($arg) = _iter.next() else { Err(QxErr::NoArgs(Some(args)))? };
+				)*
+
+				$( let $rest = _iter.rest(); )?
+
+				Ok($exp)
+			})
 	};
 }
 
-fn int_ops(ident: &str) -> Option<Expr> {
-    // return match ident {
-    //     "+" => Func::new_expr(|args, _| {
-    //         args.into_iter()
-    //             .try_fold(0_i64, |acc, el| {
-    //                 if let Expr::Int(int) = el {
-    //                     acc.checked_add(int).ok_or(QxErr::IntOverflowErr)
-    //                 } else {
-    //                     Err(QxErr::TypeErr {
-    //                         expected: read::ExprType::Int,
-    //                         found: el.get_type(),
-    //                     })
-    //                 }
-    //             })
-    //             .map(|it| Expr::Int(it))
-    //     }),
+/// ## DSL for native Func Objects
+///
+/// example usage:
+/// ```ignore
+/// 	match ident, args {
+/// 		"=", [lhs, rhs] => Expr::Bool(lhs == rhs),
+/// 		// bind the remaining arguments to rest and the environment to `my_env.
+/// 		// bind ̀`&mut Runtime` to `my_ctx`.
+/// 		// return errors using Propagation of a `Result<Expr, QxErr>`
+/// 		"println", [expr] .. @ rest; env:my_env; ctx:my_ctx => { println!("{expr:#}"); Err(QxErr::Stop)?; },
+/// 	}
+/// ```
+macro_rules! funcmatch {
+    (
+		match $it:ident, $_:ident {
+			$($name:literal, [$($arg:pat),*]
+				$($rest:ident @ ..)? $(;env: $env:ident)? $(;ctx: $ctx:ident)?
+			=> $exp:expr,)*
+		}) => {
 
-    //     _ => None?,
-    // }
-    // .into();
-    int_operation! {
-        match ident {
-            + => checked_add
-            - => checked_sub
-            * => checked_mul
-            / => checked_div
-            % => checked_rem
+			match $it {
+				$(
+					$name => func! {
+						$(env: $env,)? $(ctx: $ctx,)? $name; [$($arg),*] $($rest @ ..)? => $exp
+					},
+				)*
+
+				_ => None?,
+			}
+			.into()
+	};
+}
+
+pub fn core_map(sym: &str) -> Option<Expr> {
+    int_ops(sym).or_else(|| builtins(sym))
+}
+
+fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
+    if args.len_is(1) {
+        Err(QxErr::NoArgs(args.into()))
+    } else {
+        let mut iter = args.into_iter();
+
+        let first = match iter.next().unwrap() {
+            Expr::Int(first) => first,
+            el => {
+                return Err(QxErr::TypeErr {
+                    expected: ExprType::Int,
+                    found: el.get_type(),
+                })
+            }
+        };
+
+        iter.try_fold(first, |acc, el| {
+            if let Expr::Int(int) = el {
+                op(acc, int).ok_or(QxErr::IntOverflowErr)
+            } else {
+                Err(QxErr::TypeErr {
+                    expected: ExprType::Int,
+                    found: el.get_type(),
+                })
+            }
+        })
+        .map(|it| Expr::Int(it))
+    }
+}
+
+fn int_ops(ident: &str) -> Option<Expr> {
+    match ident {
+        "+" => Func::new_expr("+", |args, _, _| int_op(i64::checked_add, args)),
+        "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args)),
+        "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args)),
+        "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
+        "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args)),
+
+        _ => None?,
+    }
+    .into()
+}
+
+static FIRST_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
+
+fn builtins(ident: &str) -> Option<Expr> {
+    funcmatch! {
+        match ident, args {
+            "=", [lhs, rhs] => Expr::Bool(lhs == rhs),
+            "println", [expr] => { println!("{expr:#}"); Expr::Nil },
+            "prn", [expr] => { println!("{expr}"); Expr::Nil },
+            "read-string", [Expr::String(s)] => {
+                read::Input(Rc::clone(&s)).tokenize().try_into()?
+            },
+            "slurp", [Expr::String(s)] => {
+                Expr::String(
+                   std::fs::read_to_string(&s as &str)
+                   .map_err(|err| QxErr::Any(err.into()))?
+                   .into()
+               )
+           },
+           "writef", [Expr::String(file_location), Expr::String(to_write)] => {
+                match std::fs::write(&*file_location, to_write.as_bytes()) {
+                    Ok(()) => Expr::Nil,
+                    Err(err) => Err(QxErr::Any(err.into()))?
+                }
+            },
+            "eval", [ast]; env:env; ctx:ctx => ctx.eval(ast, Some(env))?,
+            "*ENV*", []; env:env => { println!("{:#?}", env); Expr::Nil },
+            "bye", [] => Err(QxErr::Stop)?,
+            "fatal", [ex] => Err(QxErr::Fatal(Rc::new(QxErr::LispErr(ex))))?,
+            "atom", [ex] => Expr::Atom(Rc::new(RefCell::new(ex))),
+            "atom?", [ex] => Expr::Bool(matches!(ex, Expr::Atom(_))),
+            "deref", [Expr::Atom(atom)] => {
+                match atom.borrow() {
+                    inner => inner.clone()
+                }
+            },
+            "reset!", [Expr::Atom(atom), new] => atom.replace(new.clone()),
+            "swap!", [Expr::Atom(atom), cl @ Expr::Closure(_)] args @ ..;
+                env:env; ctx:ctx => {
+                    let res = ctx.eval(
+						Expr::Cons(
+							cons(cl, cons(atom.take(), args))
+						), 
+						Some(env)
+					)?;
+
+					*RefCell::borrow_mut(&atom) = res.clone();
+
+                    res
+            },
+			"rev", [Expr::Cons(it)] => Expr::Cons(it.reversed()),
         }
     }
 }

@@ -47,7 +47,7 @@ pub enum QxErr {
     #[error("Interrupted, Stop")]
     Stop,
     #[error("Fatal Error: {0}")]
-    Fatal(#[from] Box<QxErr>),
+    Fatal(#[from] Rc<QxErr>),
 
     #[error(transparent)]
     Any(#[from] anyhow::Error),
@@ -59,7 +59,7 @@ pub enum QxErr {
     MissingToken(anyhow::Error),
 
     #[error("Wrong / Missing argument, received: {0:?}")]
-    NoArgs(Option<Vec<Expr>>),
+    NoArgs(Option<Cons>),
 
     #[error("Type error, expected: {expected:?}, found: {found:?}")]
     TypeErr { expected: ExprType, found: ExprType },
@@ -103,6 +103,36 @@ impl Cons {
         Cons(inner)
     }
 
+	pub fn concat(&self, other: Cons) -> Cons {
+        let mut result = other;
+        let mut current = self.reversed();
+
+        while let Some(cell) = current.0 {
+            result = Cons(Some(Rc::new(ConsCell {
+                car: cell.car.clone(),
+                cdr: result,
+            })));
+            current = cell.cdr.clone();
+        }
+
+        result
+    }
+
+	pub fn reversed(&self) -> Cons {
+        let mut reversed = Cons::default();
+        let mut current = self.clone();
+
+        while let Some(cell) = current.0 {
+            reversed = Cons(Some(Rc::new(ConsCell {
+                car: cell.car.clone(),
+                cdr: reversed,
+            })));
+            current = cell.cdr.clone();
+        }
+
+        reversed
+    }
+
     pub fn car(&self) -> Option<Expr> {
         self.0.as_ref().map(|it| it.car.clone())
     }
@@ -126,9 +156,17 @@ impl Cons {
         }
     }
 
-    pub fn len_is(self, n: usize) -> bool {
-        self.into_iter().take(n).count() == n
+    pub fn len_ge_than(&self, n: usize) -> bool {
+        self.into_iter().take(n).count() >= n
     }
+
+    pub fn len_is(&self, n: usize) -> bool {
+        self.into_iter().take(n + 1).count() == n
+    }
+}
+
+pub fn cons(car: Expr, cdr: Cons) -> Cons {
+    Cons(Some(Rc::new(ConsCell { car, cdr })))
 }
 
 impl<T: AsRef<[Expr]>> From<T> for Cons {

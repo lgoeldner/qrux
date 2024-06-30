@@ -9,7 +9,7 @@ use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline}
 use env::{Env, Inner};
 use read::{Cons, Expr, PResult, QxErr};
 
-type FuncT = fn(Cons, Env) -> Result<Expr, read::QxErr>;
+type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;
 
 pub struct Runtime {
     repl: Term,
@@ -25,7 +25,7 @@ impl std::fmt::Debug for Runtime {
 }
 
 #[derive(Clone)]
-pub struct Func(FuncT);
+pub struct Func(&'static str, FuncT);
 
 impl Eq for Func {}
 // No Closure/Func has the same type
@@ -41,19 +41,26 @@ pub struct Term {
 }
 
 impl Func {
-    pub fn apply(&self, ctx: &mut Runtime, args: Cons, env: Option<Env>) -> Result<Expr, read::QxErr> {
-        self.0(args, env.unwrap_or(ctx.env.clone()))
+    #[inline]
+    pub fn apply(
+        &self,
+        ctx: &mut Runtime,
+        args: Cons,
+        env: Option<Env>,
+    ) -> Result<Expr, read::QxErr> {
+        self.1(args, env.unwrap_or(ctx.env.clone()), ctx)
     }
 
-    pub fn new_expr(f: FuncT) -> Expr {
-        Expr::Func(Self(f))
+    #[inline]
+    pub fn new_expr(label: &'static str, f: FuncT) -> Expr {
+        Expr::Func(Self(label, f))
     }
 }
 
 impl Runtime {
     /// returns the new Runtime and the result of evaluating the prelude and,
     /// if supplied, the first `env::arg` as a file
-    
+
     pub fn new(repl: Term) -> (Self, PResult<Expr>) {
         let mut prototype = Self {
             repl,
