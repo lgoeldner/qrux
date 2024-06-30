@@ -33,7 +33,7 @@ pub struct Cons(pub Option<Rc<ConsCell>>);
 #[derive(Clone, Eq, PartialEq, Default)]
 pub struct ConsCell {
     pub car: Expr,
-    pub cdr: Option<Rc<ConsCell>>,
+    pub cdr: Cons,
 }
 
 #[derive(Clone)]
@@ -50,7 +50,7 @@ impl ConsIter {
 impl Cons {
     pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
         let inner = iter.rev().fold(None, |acc, it| {
-            Some(Rc::new(ConsCell { car: it, cdr: acc }))
+            Some(Rc::new(ConsCell { car: it, cdr: Cons(acc) }))
         });
 
         Cons(inner)
@@ -61,7 +61,7 @@ impl Cons {
     }
 
     pub fn cdr_opt(&self) -> Option<Cons> {
-        self.0.as_ref().map(|it| Cons(it.cdr.clone()))
+        self.0.as_ref().map(|it| it.cdr.clone())
     }
 
     pub fn nth(&self, n: usize) -> Option<Expr> {
@@ -73,8 +73,15 @@ impl Cons {
 
     /// cdr except it returns an empty Cons instead of an Option::None
     pub fn cdr(&self) -> Cons {
-        Cons(self.0.as_ref().map(|it| it.cdr.clone()).flatten())
+		match self.0 {
+			Some(ref it) => it.cdr.clone(),
+			None => Cons(None),
+		}
     }
+
+	pub fn len_is(self, n: usize) -> bool {
+		self.into_iter().take(n).count() == n
+	}
 }
 
 impl<T: AsRef<[Expr]>> From<T> for Cons {
@@ -82,7 +89,7 @@ impl<T: AsRef<[Expr]>> From<T> for Cons {
         Self(list.as_ref().iter().rev().fold(None, |acc, it| {
             Some(Rc::new(ConsCell {
                 car: it.clone(),
-                cdr: acc,
+                cdr: Cons(acc),
             }))
         }))
     }
@@ -94,7 +101,7 @@ impl Iterator for ConsIter {
     fn next(&mut self) -> Option<Self::Item> {
         let old_head = self.head.take();
 
-        self.head = old_head.as_ref().map(|it| it.cdr.clone()).flatten();
+        self.head = old_head.as_ref().map(|it| it.cdr.0.clone()).flatten();
 
         old_head.map(|it| it.car.clone())
     }
@@ -108,12 +115,12 @@ impl FromIterator<Expr> for Cons {
     }
 }
 
-impl IntoIterator for Cons {
+impl IntoIterator for &Cons {
     type Item = Expr;
     type IntoIter = ConsIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        ConsIter { head: self.0 }
+        ConsIter { head: self.0.clone() }
     }
 }
 

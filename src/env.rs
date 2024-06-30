@@ -4,13 +4,11 @@ use std::rc::Rc;
 
 use crate::read::Expr;
 
-
 // mod core;
 // pub use core::core_map;
 fn core_map(_: &str) -> Option<Expr> {
-	None
+    None
 }
-
 
 #[derive(Clone, Default)]
 pub struct Inner {
@@ -36,7 +34,6 @@ impl Drop for Inner {
         // creating a reference cycle
     }
 }
-
 
 impl Inner {
     #[must_use]
@@ -81,7 +78,9 @@ impl Env {
     }
 
     pub fn set(&mut self, ident: &Rc<str>, val: Expr) {
-        self.0.data.borrow_mut().insert(Rc::clone(ident), val);
+        if &**ident != "_" {
+            self.0.data.borrow_mut().insert(Rc::clone(ident), val);
+        }
     }
 
     #[must_use]

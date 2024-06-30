@@ -29,11 +29,11 @@ impl std::fmt::Debug for Cons {
 
 fn write_cons_inner(f: &mut fmt::Formatter, list: Rc<ConsCell>) -> fmt::Result {
     match &*list {
-        ConsCell { ref car, cdr: None } => write!(f, "{car}"),
+        ConsCell { ref car, cdr: Cons(None) } => write!(f, "{car}"),
 
         ConsCell {
             car,
-            cdr: Some(ref cdr),
+            cdr: Cons(Some(ref cdr)),
         } => {
             write!(f, "{car}")?;
             write!(f, " ")?;

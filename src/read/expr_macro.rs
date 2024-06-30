@@ -38,3 +38,22 @@ macro_rules! expr {
         $crate::Expr::Atom(::std::rc::Rc::new(::std::cell::RefCell::new($it)))
     };
 }
+
+#[macro_export]
+macro_rules! special_form {
+	($args:ident, $form:literal; [ $($p:pat),* ] $(..$rest:pat)? => $e:expr) => {
+		{
+			let mut _args = $args;
+
+			$(
+				let Some($p) = _args.next() else {
+					return ControlFlow::Break(Err(QxErr::Any(anyhow!(concat!("Correct Form: ", $form)))))
+				};
+			)*
+
+			$( let $rest = _args.rest(); )?
+
+			$e
+		}
+	};
+}

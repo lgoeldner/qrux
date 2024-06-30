@@ -1,7 +1,7 @@
 use crate::env::Env;
 use crate::read::types::closure::Closure;
 use crate::read::{Cons, ConsCell};
-use crate::{expr, Apply, Func};
+use crate::{expr, special_form, Apply, Func};
 use crate::{
     read::{Expr, QxErr},
     Runtime,
@@ -98,76 +98,38 @@ impl Runtime {
         };
 
         let xs = lst.cdr();
-        let mut xs_iter = xs.clone().into_iter();
+        let mut args = xs.clone().into_iter();
 
         match ident as &str {
-            "quote" => ControlFlow::Break(xs.car().ok_or(QxErr::NoArgs(None))),
-
-            "val!" => {
-                let Some(Expr::Sym(ident)) = xs.car() else {
-                    err!(form: "(val! <sym> <expr>)")
-                };
-
-                let Some(expr) = xs.cdr().car() else {
-                    err!(form: "(val! <sym> <expr>)")
-                };
-
-                ControlFlow::Break(self.defenv(&ident, &expr, env))
-            }
-
-            "defmacro!" => {
-                let Some(Expr::Sym(ident)) = xs_iter.next() else {
-                    err!(form: "(defmacro! <name> <args> <body>)")
-                };
-
-                let Some(Expr::Cons(args)) = xs_iter.next() else {
-                    err!(form: "(defmacro! <name> <args> <body>)")
-                };
-
-                let Some(body) = xs_iter.next() else {
-                    err!(form: "(defmacro! <name> <args> <body>)")
-                };
-
-                let closure = self.create_closure(&env, args, &body, true);
-                match closure {
-                    ControlFlow::Break(Ok(Expr::Closure(cl))) => {
-                        self.env.set(&ident, Expr::Closure(cl));
-                        break_ok!(expr!(nil))
-                    }
-
-                    _ => unreachable!(),
+            // "quote" => ControlFlow::Break(xs.car().ok_or(QxErr::NoArgs(None))),
+            "val!" => special_form! {
+                args, "(val! <sym> <expr>)";
+                [Expr::Sym(ident), expr] => {
+                    ControlFlow::Break(self.defenv(&ident, &expr, env))
                 }
-            }
+            },
 
-            // ("defmacro!", [Expr::Sym(ident), Expr::List(args), body]) => {
-            //     let closure = self.create_closure(&env, args, body, true);
-            //     match closure {
-            //         ControlFlow::Break(Ok(Expr::Closure(cl))) => {
-            //             self.env.set(ident, Expr::Closure(cl));
-            //             break_ok!(expr!(nil))
-            //         }
+            "defmacro!" => special_form! {
+                args, "(defmacro! <name> <args> <body>)";
+                [Expr::Sym(ident), Expr::Cons(cl_args), body] => {
+                    let ControlFlow::Break(Ok(cl @ Expr::Closure(_)))
+                            = self.create_closure(&env, cl_args, &body, true)
+                    else {
+                        unreachable!();
+                    };
 
-            //         _ => unreachable!(),
-            //     }
-            // }
-            // ("defmacro!", _) => err!(form: "(defmacro! <name> <args> <body>)"),
-            // ("val!", [Expr::Sym(ident), expr]) => ControlFlow::Break(self.defenv(ident, expr, env)),
-            // ("val!", _) => err!(form: "(val! <sym> <expr>)"),
+                    self.env.set(&ident, cl);
 
-            // // form: (try* <expr> (catch* <sym> <expr>))
-            // ("try*", [try_expr, Expr::List(catch)])
-            //     if matches!(
-            //         &**catch,
-            //         [
-            //         Expr::Sym(catch),
-            //         Expr::Sym(_catch_to),
-            //         _catch_expr
-            //         ] if &**catch == "catch*"
-            //     ) =>
-            // {
-            //     self.eval_trycatch(try_expr, &env, catch)
-            // }
-            // ("try*", _) => err!(form: "(try* <expr> (catch* <sym> <expr>))"),
+                    break_ok!(expr!(nil))
+                }
+            },
+
+            "try*" => special_form! {
+                args, "(try* <expr> (catch* <sym> <expr>)";
+                [try_expr, Expr::Cons(catch)] => {
+                    self.eval_trycatch(&try_expr, &env, catch)
+                }
+            },
 
             // ("def?", [Expr::Sym(s)]) => env
             //     .as_ref()
@@ -181,27 +143,35 @@ impl Runtime {
             //     ControlFlow::Break(self.macroexpand(Expr::List(ast.into()), &env))
             // }
             // ("mexp", _) => err!(form: "(mexp (<macro> <args>*))"),
+            "fn*" => special_form! {
+                args, "(fn* (<args>*) <body>)";
+                [Expr::Cons(args), body] => self.create_closure(&env, args, &body, false)
+            },
 
-            // ("fn*", [Expr::List(args), body]) => self.create_closure(&env, args, body, false),
-            // ("fn*", _) => err!(form: "(fn* (<args>*) <body>)"),
+            "if" => special_form! {
+                args, "(if <condition> <then> <else>)";
+                [cond, then] ..xs => self.eval_if(xs, env, &cond, &then)
+            },
 
-            // ("if", [cond, then, ..]) => self.eval_if(&lst, env, cond, then),
-            // ("if", _) => err!(form: "(if <condition> <then> ?<else>)"),
+            "let*" => special_form! {
+                args, "(let* (<sym> <expr>)+ <expr>)";
+                [Expr::List(bindings), to_eval] => {
+                    self.eval_do(&env, &bindings, &to_eval)
+                }
+            },
 
-            // ("let*", [Expr::List(new_bindings), to_eval]) => {
-            //     self.eval_do(&env, new_bindings, to_eval)
-            // }
-            // ("let*", _) => err!(form: "(let* (<sym> <expr>)+ <expr>)"),
+            "quote" => special_form! {
+                args, "(quote <expr>)";
+                [expr] => ControlFlow::Break(Ok(expr.clone()))
+            },
 
-            // ("quote", [expr]) => ControlFlow::Break(Ok(expr.clone())),
-            // ("quote", _) => err!(form: "(quote <expr>)"),
-
-            // ("quasiquote", [expr]) => ControlFlow::Continue(EvalTco {
-            //     ast: quasiquote(expr),
-            //     env,
-            // }),
-            // ("qqex", [expr]) => ControlFlow::Break(Ok(quasiquote(expr))),
-            // ("quasiquote", _) => err!(form: "(quasiquote <expr>)"),
+            "quasiquote" => special_form! {
+                args, "(quasiquote <expr>)";
+                [expr] => ControlFlow::Continue(EvalTco {
+                    ast: quasiquote(&expr),
+                    env
+                })
+            },
 
             // ("do", exprs) => {
             //     let last_expr = match exprs.last() {
@@ -240,26 +210,44 @@ impl Runtime {
         &mut self,
         try_expr: &Expr,
         env: &Option<Env>,
-        catch: &Rc<[Expr]>,
+        catch: Cons,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let res = self.eval(try_expr.clone(), env.clone());
-        if let Err(e) = res {
-            let Expr::Sym(catch_to_sym) = &catch[1] else {
-                unreachable!()
-            };
+        // check that the catch expression is valid
+        let mut c_iter = catch.into_iter();
+        if !matches!(c_iter.next(), Some(Expr::Sym(catch)) if &*catch == "catch*") {
+            err!(form: "(try* <expr> (catch* <sym> <expr>))")
+        }
 
+        let Some(Expr::Sym(catch_to_sym)) = c_iter.next() else {
+            err!(form: "(try* <expr> (catch* <sym> <expr>))")
+        };
+
+        let Some(catch_expr) = c_iter.next() else {
+            err!(form: "(try* <expr> (catch* <sym> <expr>))")
+        };
+
+        // evaluate the expression
+        let res = self.eval(try_expr.clone(), env.clone());
+
+        // if its an error, evaluate the catch expression
+        if let Err(e) = res {
+            // get the symbol to bind the error to
+
+            // create the env with the error
             let mut err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
+            // bind the error
             err_env.set(
-                catch_to_sym,
+                &catch_to_sym,
                 match e {
                     QxErr::LispErr(e) => e,
                     _ => Expr::String(e.to_string().into()),
                 },
             );
 
+            // evaluate the catch expression
             ControlFlow::Continue(EvalTco {
-                ast: catch[2].clone(),
+                ast: catch_expr,
                 env: Some(err_env),
             })
         } else {
@@ -297,7 +285,7 @@ impl Runtime {
 
     fn eval_if(
         &mut self,
-        lst: &[Expr],
+        otherwise: Cons,
         env: Option<Env>,
         cond: &Expr,
         then: &Expr,
@@ -305,14 +293,9 @@ impl Runtime {
         let cond = early_ret!(self.eval(cond.clone(), env.clone()));
 
         match cond {
-            Expr::Bool(false) | Expr::Nil => lst.get(3).map_or_else(
+            Expr::Bool(false) | Expr::Nil => otherwise.car().map_or_else(
                 || ControlFlow::Break(Ok(Expr::Nil)),
-                |else_branch| {
-                    ControlFlow::Continue(EvalTco {
-                        ast: else_branch.clone(),
-                        env,
-                    })
-                },
+                |ast| ControlFlow::Continue(EvalTco { ast, env }),
             ),
             _ => ControlFlow::Continue(EvalTco {
                 ast: then.clone(),
@@ -451,35 +434,36 @@ fn is_special_form(sym: &str) -> bool {
             | "catch*"
     )
 }
-
-fn qq_list(elts: &[Expr]) -> Expr {
-    let mut acc = vec![];
-    for elt in elts.iter().rev() {
-        match elt {
-            Expr::List(v) if v.len() == 2 => {
-                if matches!(v[0], Expr::Sym(ref s) if &** s == "splice-unquote") {
-                    acc = vec![expr!(concat), v[1].clone(), Expr::List(acc.into())];
-                    continue;
-                }
-            }
-            _ => {}
-        }
-        acc = vec![expr!(cons), quasiquote(elt), Expr::List(acc.into())];
-    }
-    Expr::List(acc.into())
+ 
+fn qq_list(elts: Cons) -> Expr {
+	todo!()
+    // let mut acc = vec![];
+    // for elt in elts.into_iter().rev() {
+    //     match elt {
+    //         Expr::List(v) if v.len() == 2 => {
+    //             if matches!(v[0], Expr::Sym(ref s) if &** s == "splice-unquote") {
+    //                 acc = vec![expr!(concat), v[1].clone(), Expr::List(acc.into())];
+    //                 continue;
+    //             }
+    //         }
+    //         _ => {}
+    //     }
+    //     acc = vec![expr!(cons), quasiquote(&elt), Expr::List(acc.into())];
+    // }
+    // Expr::List(acc.into())
 }
 
 fn quasiquote(ast: &Expr) -> Expr {
     match ast {
-        Expr::List(v) => {
-            if v.len() == 2 {
-                if let Expr::Sym(ref s) = v[0] {
+        Expr::Cons(v) => {
+            if v.clone().len_is(2) {
+                if let Expr::Sym(ref s) = v.car().unwrap() {
                     if &**s == "unquote" {
-                        return v[1].clone();
+                        return v.cdr().car().unwrap();
                     }
                 }
             }
-            qq_list(v)
+            qq_list(v.clone())
         }
         _ => ast.clone(),
     }
