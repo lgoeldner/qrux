@@ -9,7 +9,7 @@ use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline}
 use env::{Env, Inner};
 use read::{Cons, Expr, PResult, QxErr};
 
-type FuncT = fn(&mut Runtime, Cons, Env) -> Result<Expr, read::QxErr>;
+type FuncT = fn(Cons, Env) -> Result<Expr, read::QxErr>;
 
 pub struct Runtime {
     repl: Term,
@@ -42,7 +42,7 @@ pub struct Term {
 
 impl Func {
     pub fn apply(&self, ctx: &mut Runtime, args: Cons, env: Option<Env>) -> Result<Expr, read::QxErr> {
-        self.0(ctx, args, env.unwrap_or(ctx.env.clone()))
+        self.0(args, env.unwrap_or(ctx.env.clone()))
     }
 
     pub fn new_expr(f: FuncT) -> Expr {

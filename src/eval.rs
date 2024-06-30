@@ -1,6 +1,6 @@
 use crate::env::Env;
 use crate::read::types::closure::Closure;
-use crate::read::{Cons, ConsCell};
+use crate::read::{Cons, ConsCell, ExprType};
 use crate::{expr, special_form, Apply, Func};
 use crate::{
     read::{Expr, QxErr},
@@ -268,8 +268,8 @@ impl Runtime {
         for pair in new_bindings.chunks_exact(2) {
             let [Expr::Sym(ident), expr] = pair else {
                 return ControlFlow::Break(Err(QxErr::TypeErr {
-                    expected: Box::new(expr!(sym "<sym>")),
-                    found: Box::new(pair[0].clone()),
+                    expected: ExprType::Sym,
+                    found: pair[0].get_type(),
                 }));
             };
 

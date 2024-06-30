@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, default, rc::Rc};
 
 use thiserror::Error;
 
@@ -27,6 +27,50 @@ pub enum Expr {
     Nil,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
+pub enum ExprType {
+    Atom,
+    Closure,
+    Func,
+    Int,
+    String,
+    Sym,
+    List,
+    Bool,
+    Cons,
+    #[default]
+    Nil,
+}
+
+#[derive(Error, Debug)]
+pub enum QxErr {
+    #[error("Interrupted, Stop")]
+    Stop,
+    #[error("Fatal Error: {0}")]
+    Fatal(#[from] Box<QxErr>),
+
+    #[error(transparent)]
+    Any(#[from] anyhow::Error),
+
+    #[error("Mismatched Paren {0}")]
+    MismatchedParen(ParenType),
+
+    #[error("Missing Token: {0}")]
+    MissingToken(anyhow::Error),
+
+    #[error("Wrong / Missing argument, received: {0:?}")]
+    NoArgs(Option<Vec<Expr>>),
+
+    #[error("Type error, expected: {expected:?}, found: {found:?}")]
+    TypeErr { expected: ExprType, found: ExprType },
+
+    #[error("{0}")]
+    LispErr(Expr),
+
+    #[error("Integer Operation Failed!")]
+    IntOverflowErr,
+}
+
 #[derive(Clone, Eq, PartialEq, Default)]
 pub struct Cons(pub Option<Rc<ConsCell>>);
 
@@ -50,7 +94,10 @@ impl ConsIter {
 impl Cons {
     pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
         let inner = iter.rev().fold(None, |acc, it| {
-            Some(Rc::new(ConsCell { car: it, cdr: Cons(acc) }))
+            Some(Rc::new(ConsCell {
+                car: it,
+                cdr: Cons(acc),
+            }))
         });
 
         Cons(inner)
@@ -73,15 +120,15 @@ impl Cons {
 
     /// cdr except it returns an empty Cons instead of an Option::None
     pub fn cdr(&self) -> Cons {
-		match self.0 {
-			Some(ref it) => it.cdr.clone(),
-			None => Cons(None),
-		}
+        match self.0 {
+            Some(ref it) => it.cdr.clone(),
+            None => Cons(None),
+        }
     }
 
-	pub fn len_is(self, n: usize) -> bool {
-		self.into_iter().take(n).count() == n
-	}
+    pub fn len_is(self, n: usize) -> bool {
+        self.into_iter().take(n).count() == n
+    }
 }
 
 impl<T: AsRef<[Expr]>> From<T> for Cons {
@@ -120,37 +167,10 @@ impl IntoIterator for &Cons {
     type IntoIter = ConsIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        ConsIter { head: self.0.clone() }
+        ConsIter {
+            head: self.0.clone(),
+        }
     }
-}
-
-#[derive(Error, Debug)]
-pub enum QxErr {
-    #[error("Interrupted, Stop")]
-    Stop,
-    #[error("Fatal Error: {0}")]
-    Fatal(#[from] Box<QxErr>),
-
-    #[error(transparent)]
-    Any(#[from] anyhow::Error),
-
-    #[error("Mismatched Paren {0}")]
-    MismatchedParen(ParenType),
-
-    #[error("Missing Token: {0}")]
-    MissingToken(anyhow::Error),
-
-    #[error("Wrong / Missing argument, received: {0:?}")]
-    NoArgs(Option<Vec<Expr>>),
-
-    #[error("Type error, expected: {expected:?}, found: {found:?}")]
-    TypeErr {
-        expected: Box<Expr>,
-        found: Box<Expr>,
-    },
-
-    #[error("{0}")]
-    LispErr(Expr),
 }
 
 impl Expr {
@@ -160,6 +180,21 @@ impl Expr {
             Self::Sym(s) => &**s == sym,
             Self::List(l) => l.iter().any(|ex| ex.contains_sym(sym)),
             _ => false,
+        }
+    }
+
+    pub fn get_type(&self) -> ExprType {
+        match self {
+            Self::Int(_) => ExprType::Int,
+            Self::String(_) => ExprType::String,
+            Self::Sym(_) => ExprType::Sym,
+            Self::List(_) => ExprType::List,
+            Self::Bool(_) => ExprType::Bool,
+            Self::Cons(_) => ExprType::Cons,
+            Self::Nil => ExprType::Nil,
+            Self::Atom(_) => ExprType::Atom,
+            Self::Closure(_) => ExprType::Closure,
+            Self::Func(_) => ExprType::Func,
         }
     }
 }

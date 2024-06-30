@@ -1,3 +1,5 @@
+//! No longer compatible! Use `env::ll_core`
+
 use std::cell::RefCell;
 use std::num::TryFromIntError;
 use std::ops;
@@ -22,7 +24,7 @@ pub fn core_map(inp: &str) -> Option<Expr> {
 macro_rules! func_expr {
     // handles argument matching and returning
     ($name:literal; $args_pat:pat => $exp:expr) => {
-        Func::new_expr(|_, args| {
+        Func::new_expr(|args, _| {
             if let $args_pat = args {
                 Ok($exp)
             } else {
