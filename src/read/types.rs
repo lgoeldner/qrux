@@ -114,9 +114,9 @@ impl ConsIter {
 }
 
 impl Cons {
-	pub const fn nil() -> Self {
-		Self(None)
-	}
+    pub const fn nil() -> Self {
+        Self(None)
+    }
 
     pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
         let inner = iter.rev().fold(None, |acc, it| {
@@ -190,6 +190,14 @@ impl Cons {
 
     pub fn len_is(&self, n: usize) -> bool {
         self.into_iter().take(n + 1).count() == n
+    }
+
+	#[inline]
+    pub fn new(e: impl Into<Option<Expr>>) -> Cons {
+        match e.into() {
+            Some(e) => cons(e, Cons::nil()),
+            None => Cons::nil(),
+        }
     }
 }
 
@@ -295,3 +303,6 @@ impl Input {
         super::tokenize(&self.0)
     }
 }
+
+#[cfg(test)]
+mod test;

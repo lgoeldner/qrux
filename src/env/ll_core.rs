@@ -108,6 +108,10 @@ fn int_ops(ident: &str) -> Option<Expr> {
         "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
         "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args)),
 
+        ">" => func! {">"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs > rhs) },
+        "<" => func! {"<"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs < rhs) },
+        ">=" => func! {">="; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs >= rhs) },
+        "<=" => func! {"<="; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs <= rhs) },
         _ => None?,
     }
     .into()
@@ -118,8 +122,19 @@ static FIRST_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
 fn list_builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident, args {
+            "concat", [] lists @ .. => {
+                lists.into_iter()
+                .map(|it| match it {
+                    Expr::Cons(it) => it,
+                    el => Cons::new(el),
+                })
+                .reduce(|acc, it| acc.concat(it))
+                .map_or(Expr::Nil, |it| Expr::Cons(it))
+            },
+
+            "rev", [Expr::Cons(it)] => Expr::Cons(it.reversed()),
             "cons", [el, Expr::Cons(lst)] => Expr::Cons(cons(el, lst)),
-			"concat", [] lists @ .. => Expr::Nil,
+            "list", [] rest @ .. => Expr::Cons(rest),
         }
     }
 }
@@ -176,8 +191,8 @@ fn builtins(ident: &str) -> Option<Expr> {
 
                     res
             },
+			"not", [Expr::Bool(b)] => Expr::Bool(!b),
 
-            "rev", [Expr::Cons(it)] => Expr::Cons(it.reversed()),
         }
     }
 }

@@ -2,9 +2,7 @@ pub use super::Expr;
 
 #[macro_export]
 macro_rules! expr {
-    ($it:ident) => {
-        $crate::Expr::Sym(stringify!($it).into())
-    };
+
 
     (str $it:expr) => {
         $crate::Expr::String($it.into())
@@ -23,7 +21,7 @@ macro_rules! expr {
     };
 
     (cons $($it:expr),*) => {
-        Expr::Cons($crate::read::types::Cons::from(&[$($it), *]))
+        $crate::Expr::Cons($crate::read::types::Cons::from(&[$($it), *]))
     };
 
     (nil) => {
@@ -36,6 +34,10 @@ macro_rules! expr {
 
     (atom $it:expr) => {
         $crate::Expr::Atom(::std::rc::Rc::new(::std::cell::RefCell::new($it)))
+    };
+
+	($it:ident) => {
+        $crate::Expr::Sym(stringify!($it).into())
     };
 }
 

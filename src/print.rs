@@ -10,14 +10,14 @@ pub fn pp_ast(ast: &Expr) {
 
 impl std::fmt::Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{")?;
+        write!(f, "(")?;
 
         self.0
             .as_ref()
             .map(|it| write_cons_inner(f, it.clone()))
             .transpose()?;
 
-        write!(f, "}}")
+        write!(f, ")")
     }
 }
 
@@ -29,13 +29,21 @@ impl std::fmt::Debug for Cons {
 
 fn write_cons_inner(f: &mut fmt::Formatter, list: Rc<ConsCell>) -> fmt::Result {
     match &*list {
-        ConsCell { ref car, cdr: Cons(None) } => write!(f, "{car}"),
+        ConsCell {
+            ref car,
+            cdr: Cons(None),
+        } => write!(f, "{car}"),
 
         ConsCell {
             car,
             cdr: Cons(Some(ref cdr)),
         } => {
-            write!(f, "{car}")?;
+            if f.alternate() {
+                write!(f, "{car:#}")?;
+            } else {
+                write!(f, "{car}")?;
+            }
+
             write!(f, " ")?;
 
             write_cons_inner(f, cdr.clone())
@@ -74,11 +82,11 @@ impl std::fmt::Display for Expr {
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
                 Self::Cons(it) => {
-                    write!(f, "{{")?;
+                    write!(f, "(")?;
                     it.0.as_ref()
                         .map(|it| write_cons_inner(f, it.clone()))
                         .transpose()?;
-                    write!(f, "}}")
+                    write!(f, ")")
                 }
             }
         } else {

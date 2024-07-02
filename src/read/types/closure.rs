@@ -7,7 +7,7 @@ use super::{Cons, Expr, QxErr};
 #[derive(Clone, Debug)]
 pub struct Closure {
     pub args_name: Box<[Rc<str>]>,
-    pub body: Box<Expr>,
+    pub body: Expr,
     pub captured: Env,
     pub is_macro: bool,
 }
@@ -24,7 +24,7 @@ impl Closure {
     pub fn new(args_name: Vec<Rc<str>>, body: Expr, captured: Env, is_macro: bool) -> Self {
         Self {
             args_name: args_name.into(),
-            body: Box::new(body),
+            body: body,
             captured,
             is_macro,
         }
