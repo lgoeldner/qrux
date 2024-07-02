@@ -1,6 +1,6 @@
 use crate::env::Env;
 use crate::read::types::closure::Closure;
-use crate::read::{Cons, ConsCell, ExprType};
+use crate::read::{cons, Cons, ConsCell, ExprType};
 use crate::{expr, special_form, Apply, Func};
 use crate::{
     read::{Expr, QxErr},
@@ -98,10 +98,9 @@ impl Runtime {
         };
 
         let xs = lst.cdr();
-        let mut args = xs.clone().into_iter();
+        let args = xs.clone().into_iter();
 
         match ident as &str {
-            // "quote" => ControlFlow::Break(xs.car().ok_or(QxErr::NoArgs(None))),
             "val!" => special_form! {
                 args, "(val! <sym> <expr>)";
                 [Expr::Sym(ident), expr] => {
@@ -131,18 +130,6 @@ impl Runtime {
                 }
             },
 
-            // ("def?", [Expr::Sym(s)]) => env
-            //     .as_ref()
-            //     .unwrap_or(&self.env)
-            //     .get(s)
-            //     .unwrap_or(Expr::Nil)
-            //     .apply(Ok)
-            //     .apply(ControlFlow::Break),
-
-            // ("mexp", ast @ [Expr::Sym(_), ..]) => {
-            //     ControlFlow::Break(self.macroexpand(Expr::List(ast.into()), &env))
-            // }
-            // ("mexp", _) => err!(form: "(mexp (<macro> <args>*))"),
             "fn*" => special_form! {
                 args, "(fn* (<args>*) <body>)";
                 [Expr::Cons(args), body] => self.create_closure(&env, args, &body, false)
@@ -155,8 +142,8 @@ impl Runtime {
 
             "let*" => special_form! {
                 args, "(let* (<sym> <expr>)+ <expr>)";
-                [Expr::List(bindings), to_eval] => {
-                    self.eval_do(&env, &bindings, &to_eval)
+                [Expr::Cons(bindings), to_eval] => {
+                    self.eval_do(&env, bindings, &to_eval)
                 }
             },
 
@@ -173,35 +160,30 @@ impl Runtime {
                 })
             },
 
-            // ("do", exprs) => {
-            //     let last_expr = match exprs.last() {
-            //         None => err!(form: "(do <expr>*)"),
-            //         Some(expr) => expr,
-            //     };
+            "do" => {
+                let mut peekable = args.peekable();
 
-            //     if exprs.len() > 1 {
-            //         for exp in &exprs[..exprs.len() - 1] {
-            //             early_ret!(self.eval(exp.clone(), env.clone()));
-            //         }
-            //     }
+                if peekable.peek().is_none() {
+                    err!(form: "(do <expr>*)");
+                }
 
-            //     ControlFlow::Continue(EvalTco {
-            //         ast: last_expr.clone(),
-            //         env,
-            //     })
-            // }
-            // ("map", [fun, lst @ Expr::List(_)]) => {
-            //     let Expr::List(lst) = early_ret!(self.eval(lst.clone(), env.clone())) else {
-            //         unreachable!()
-            //     };
+                // evaluate until the last expr, breaking it from the loop
+                let last_expr = loop {
+                    let it = peekable.next().unwrap();
+                    if peekable.peek().is_none() {
+                        break it;
+                    } else {
+                        early_ret!(self.eval(it, env.clone()));
+                    }
+                };
 
-            //     let res = lst
-            //         .iter()
-            //         .map(|it| self.eval(expr!(list fun.clone(), it.clone()), env.clone()))
-            //         .collect::<Result<Vec<_>, _>>();
+                // return it using TCO
+                ControlFlow::Continue(EvalTco {
+                    ast: last_expr,
+                    env,
+                })
+            }
 
-            //     ControlFlow::Break(Ok(Expr::List(early_ret!(res).into())))
-            // }
             _ => self.apply_func(Expr::Cons(lst), env),
         }
     }
@@ -258,23 +240,23 @@ impl Runtime {
     fn eval_do(
         &mut self,
         env: &Option<Env>,
-        new_bindings: &Rc<[Expr]>,
+        new_bindings: Cons,
         to_eval: &Expr,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         // create new env, set as current, old env is now self.env.outer
 
         let mut env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
-        for pair in new_bindings.chunks_exact(2) {
-            let [Expr::Sym(ident), expr] = pair else {
+        for [binding, expr] in new_bindings.pair_iter() {
+            let Expr::Sym(ident) = binding else {
                 return ControlFlow::Break(Err(QxErr::TypeErr {
                     expected: ExprType::Sym,
-                    found: pair[0].get_type(),
+                    found: binding.get_type(),
                 }));
             };
 
-            let val = self.eval(expr.clone(), Some(env.clone()));
-            env.set(ident, early_ret!(val));
+            let val = self.eval(expr, Some(env.clone()));
+            env.set(&ident, early_ret!(val));
         }
 
         ControlFlow::Continue(EvalTco {
@@ -436,21 +418,45 @@ fn is_special_form(sym: &str) -> bool {
 }
 
 fn qq_list(elts: Cons) -> Expr {
-    Expr::String("TODO: qq_list".into())
-    // let mut acc = vec![];
-    // for elt in elts.into_iter().rev() {
-    //     match elt {
-    //         Expr::List(v) if v.len() == 2 => {
-    //             if matches!(v[0], Expr::Sym(ref s) if &** s == "splice-unquote") {
-    //                 acc = vec![expr!(concat), v[1].clone(), Expr::List(acc.into())];
-    //                 continue;
-    //             }
-    //         }
-    //         _ => {}
-    //     }
-    //     acc = vec![expr!(cons), quasiquote(&elt), Expr::List(acc.into())];
-    // }
-    // Expr::List(acc.into())
+    // TODO: rewrite with linked lists
+    // elts.into_iter().fold(Cons::nil(), |acc, elt| {
+    //     // if the el is not unquoted, add (list <el>)
+    //     // if its spliced, add <el>
+    //     // else add (list '<el>)
+
+    //     let new = match elt {
+    //         Expr::Cons(c) if matches!(c.car(), Some(Expr::Sym(ref s)) if &**s == "unquote" ) => {
+    //             expr!(cons expr!(sym "list"), Expr::Cons(c.cdr()))
+    //         },
+
+    // 		Expr::Cons(c) if matches!(c.car(), Some(Expr::Sym(ref s)) if &**s == "splice-unquote" ) => {
+    // 			Expr::Cons(c.cdr())
+    // 		}
+
+    //         elt => elt,
+    //     };
+
+    //     cons(dbg!(new), acc)
+    // }).apply(|it| cons(expr!(sym "concat"), it));
+
+    // todo!()
+    let elts = elts.into_iter().collect::<Vec<_>>();
+
+    let mut acc = vec![];
+    for elt in elts.iter().rev() {
+        match elt {
+            Expr::Cons(v) if v.len_is(2) => {
+                if matches!(v.car(), Some(Expr::Sym(ref s)) if &** s == "splice-unquote") {
+                    acc = vec![expr!(concat), v.nth(1).unwrap(), Expr::Cons(acc.into())];
+                    continue;
+                }
+            }
+            _ => {}
+        }
+        acc = vec![expr!(cons), quasiquote(&elt), Expr::Cons(acc.into())];
+    }
+
+    Expr::Cons(acc.into())
 }
 
 fn quasiquote(ast: &Expr) -> Expr {

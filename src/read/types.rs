@@ -80,18 +80,44 @@ pub struct ConsCell {
     pub cdr: Cons,
 }
 
+pub struct ConsExactPairIter {
+    iter: ConsIter,
+}
+
+impl Iterator for ConsExactPairIter {
+    type Item = [Expr; 2];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some([self.iter.next()?, self.iter.next()?])
+    }
+}
+
 #[derive(Clone)]
 pub struct ConsIter {
-    head: Option<Rc<ConsCell>>,
+    head: Cons,
 }
 
 impl ConsIter {
-    pub fn rest(self) -> Cons {
-        Cons(self.head)
+    pub fn inner(&self) -> &Cons {
+        &self.head
+    }
+}
+
+impl ConsIter {
+    pub fn rest(&mut self) -> Cons {
+        Cons(self.head.0.take())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.head.0.is_none()
     }
 }
 
 impl Cons {
+	pub const fn nil() -> Self {
+		Self(None)
+	}
+
     pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
         let inner = iter.rev().fold(None, |acc, it| {
             Some(Rc::new(ConsCell {
@@ -103,7 +129,13 @@ impl Cons {
         Cons(inner)
     }
 
-	pub fn concat(&self, other: Cons) -> Cons {
+    pub fn pair_iter(self) -> ConsExactPairIter {
+        ConsExactPairIter {
+            iter: self.into_iter(),
+        }
+    }
+
+    pub fn concat(self, other: Cons) -> Cons {
         let mut result = other;
         let mut current = self.reversed();
 
@@ -118,19 +150,15 @@ impl Cons {
         result
     }
 
-	pub fn reversed(&self) -> Cons {
-        let mut reversed = Cons::default();
-        let mut current = self.clone();
-
-        while let Some(cell) = current.0 {
-            reversed = Cons(Some(Rc::new(ConsCell {
-                car: cell.car.clone(),
-                cdr: reversed,
-            })));
-            current = cell.cdr.clone();
+    pub fn reversed(self) -> Cons {
+        fn do_rev(it: Cons, acc: Cons) -> Cons {
+            match it.clone() {
+                Cons(None) => acc,
+                Cons(Some(cell)) => do_rev(it.cdr(), cons(cell.car.clone(), acc)),
+            }
         }
 
-        reversed
+        do_rev(self, Cons(None))
     }
 
     pub fn car(&self) -> Option<Expr> {
@@ -148,7 +176,7 @@ impl Cons {
         }
     }
 
-    /// cdr except it returns an empty Cons instead of an Option::None
+    /// `cdr_opt` except it returns an empty Cons instead of an Option::None
     pub fn cdr(&self) -> Cons {
         match self.0 {
             Some(ref it) => it.cdr.clone(),
@@ -156,8 +184,8 @@ impl Cons {
         }
     }
 
-    pub fn len_ge_than(&self, n: usize) -> bool {
-        self.into_iter().take(n).count() >= n
+    pub fn len_is_atleast(&self, n: usize) -> bool {
+        self.into_iter().take(n).count() == n
     }
 
     pub fn len_is(&self, n: usize) -> bool {
@@ -184,9 +212,9 @@ impl Iterator for ConsIter {
     type Item = Expr;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let old_head = self.head.take();
+        let old_head = self.head.0.take();
 
-        self.head = old_head.as_ref().map(|it| it.cdr.0.clone()).flatten();
+        self.head = Cons(old_head.as_ref().map(|it| it.cdr.0.clone()).flatten());
 
         old_head.map(|it| it.car.clone())
     }
@@ -205,9 +233,7 @@ impl IntoIterator for &Cons {
     type IntoIter = ConsIter;
 
     fn into_iter(self) -> Self::IntoIter {
-        ConsIter {
-            head: self.0.clone(),
-        }
+        ConsIter { head: self.clone() }
     }
 }
 
