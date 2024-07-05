@@ -134,6 +134,8 @@ fn list_builtins(ident: &str) -> Option<Expr> {
 
             "rev", [Expr::Cons(it)] => Expr::Cons(it.reversed()),
             "cons", [el, Expr::Cons(lst)] => Expr::Cons(cons(el, lst)),
+            "car", [Expr::Cons(lst)] => lst.car().unwrap_or(Expr::Nil),
+            "cdr", [Expr::Cons(lst)] => Expr::Cons(lst.cdr()),
             "list", [] rest @ .. => Expr::Cons(rest),
         }
     }
@@ -143,6 +145,18 @@ fn builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident, args {
             "=", [lhs, rhs] => Expr::Bool(lhs == rhs),
+
+			// loose type eq
+            "t-eq?", [lhs, rhs] => Expr::Bool(
+                // not null safe
+                lhs.get_type() == ExprType::Nil
+                || rhs.get_type() == ExprType::Nil
+                || lhs.get_type() == rhs.get_type()
+            ),
+			// strict type eq
+            "t-eq", [lhs, rhs] => Expr::Bool(lhs.get_type() == rhs.get_type()),
+
+            "typeof", [expr] => Expr::String(expr.get_type().to_string().into()),
 
             "println", [expr] => { println!("{expr:#}"); Expr::Nil },
             "prn", [expr] => { println!("{expr}"); Expr::Nil },
@@ -191,7 +205,7 @@ fn builtins(ident: &str) -> Option<Expr> {
 
                     res
             },
-			"not", [Expr::Bool(b)] => Expr::Bool(!b),
+            "not", [Expr::Bool(b)] => Expr::Bool(!b),
 
         }
     }

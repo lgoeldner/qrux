@@ -113,18 +113,14 @@ impl Term {
     #[must_use]
     #[allow(clippy::missing_panics_doc)]
     pub fn new() -> Self {
-        let mut dir = directories_next::ProjectDirs::from(
-            //
-            "io",
-            "Linus Göldner",
-            "qrux",
-        )
-        .map_or_else(
-            || PathBuf::from(".qrux-history"),
-            |it| it.data_dir().to_path_buf(),
-        );
+        let dir = directories_next::ProjectDirs::from("io", "Linus Göldner", "qrux")
+            .map_or_else(
+                || PathBuf::from(".qrux-history"),
+                |it| it.data_dir().to_path_buf(),
+            )
+            .with_file_name("qrux-history.txt");
 
-        dir.push("qrux-history.txt");
+        // dir.push("qrux-history.txt");
 
         let history = Box::new(FileBackedHistory::with_file(50, dir).unwrap());
 

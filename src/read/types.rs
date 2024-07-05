@@ -42,6 +42,12 @@ pub enum ExprType {
     Nil,
 }
 
+impl std::fmt::Display for ExprType {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		write!(f, "{:?}", self)
+	}
+}
+
 #[derive(Error, Debug)]
 pub enum QxErr {
     #[error("Interrupted, Stop")]
@@ -118,6 +124,10 @@ impl Cons {
         Self(None)
     }
 
+    pub fn cdar(&self) -> Option<Expr> {
+        self.cdr().car()
+    }
+
     pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
         let inner = iter.rev().fold(None, |acc, it| {
             Some(Rc::new(ConsCell {
@@ -192,7 +202,7 @@ impl Cons {
         self.into_iter().take(n + 1).count() == n
     }
 
-	#[inline]
+    #[inline]
     pub fn new(e: impl Into<Option<Expr>>) -> Cons {
         match e.into() {
             Some(e) => cons(e, Cons::nil()),

@@ -1,6 +1,6 @@
 use crate::env::Env;
 use crate::read::types::closure::Closure;
-use crate::read::{cons, Cons, ConsCell, ExprType};
+use crate::read::{Cons, ExprType};
 use crate::{expr, special_form, Apply, Func};
 use crate::{
     read::{Expr, QxErr},
@@ -424,54 +424,27 @@ fn is_special_form(sym: &str) -> bool {
 
 fn qq_list(elts: Cons) -> Result<Expr, QxErr> {
     // TODO: rewrite with linked lists
-    // let new = elts.into_iter().try_fold(Cons::nil(), |acc, elt| {
-    //     // if the el is not unquoted, add (list <el>)
-    //     // if its spliced, add <el>
-    //     // else add (list '<el>)
-
-	// 		let new = match elt {
-	// 			Expr::Cons(c) if matches!(c.car(), Some(Expr::Sym(ref s)) if &**s == "unquote" ) => {
-	// 				Expr::Cons(cons(expr!(sym "list"), c.cdr()))
-	// 				// expr!(cons expr!(sym "list"), Expr::Cons(c.cdr()))
-	// 			},
-				
-	// 			Expr::Cons(c) if matches!(c.car(), Some(Expr::Sym(ref s)) if &**s == "splice-unquote" ) => {
-	// 				let Some(Expr::Cons(inner)) = c.cdr().car() else {
-	// 					return Err(QxErr::NoArgs(None))?;
-	// 					// unreachable!();
-	// 				};
-
-	// 				Expr::Cons(inner)
-	// 			}
-
-	// 			elt => expr!(cons expr!(sym "quasiquote"), elt),
-	// 		};
-
-	// 		Ok::<_, QxErr>(cons(new, acc))
-    // 	})?.apply(|it| {
-	// 		cons(expr!(sym "concat"), it.reversed())
-	// 	});
-
-    // // todo!()
-    // let elts = elts.into_iter().collect::<Vec<_>>();
 
     let mut acc = vec![];
-	let elts = elts.into_iter().collect::<Vec<_>>();
+    let elts = elts.into_iter().collect::<Vec<_>>();
     for elt in elts.into_iter().rev() {
         match elt {
             Expr::Cons(ref v) if v.len_is(2) => {
                 if matches!(v.car(), Some(Expr::Sym(ref s)) if &** s == "splice-unquote") {
-                    acc = vec![expr!(concat), v.nth(1).ok_or(QxErr::NoArgs(None))?, Expr::Cons(acc.into())];
+                    acc = vec![
+                        expr!(concat),
+                        v.nth(1).ok_or(QxErr::NoArgs(None))?,
+                        Expr::Cons(acc.into()),
+                    ];
                     continue;
                 }
             }
             _ => {}
         }
-        acc = vec![expr!(cons), quasiquote(&elt)?, Expr::Cons(acc.into())];
+        acc = vec![expr!(sym "cons"), quasiquote(&elt)?, Expr::Cons(acc.into())];
     }
 
     Ok(Expr::Cons(acc.into()))
-    // Ok(Expr::Cons(new))
 }
 
 fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
@@ -480,13 +453,13 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
             if v.clone().len_is(2) {
                 if let Expr::Sym(ref s) = v.car().unwrap() {
                     if &**s == "unquote" {
-                        return Ok(v.cdr().car().unwrap());
+                        return Ok(v.cdar().unwrap());
                     }
                 }
             }
 
             qq_list(v.clone())
         }
-        _ => Ok(dbg!(ast.clone())),
+        _ => Ok(ast.clone()),
     }
 }
