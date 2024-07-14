@@ -22,6 +22,10 @@ impl TokenStream<'_> {
         })
     }
 
+	pub fn is_eof(&self) -> bool {
+		self.pos >= self.tokens.len()
+	}
+
     pub const fn save(&self) -> Backup {
         Backup(self.pos)
     }

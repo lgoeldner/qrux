@@ -1,5 +1,5 @@
 #![warn(clippy::pedantic, clippy::nursery)]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc, clippy::must_use_candidate)]
 // #![feature(try_trait_v2)]
 
 use std::path::PathBuf;
@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::{Env, Inner};
-use read::{Cons, Expr, PResult, QxErr};
+use read::{Cons, Expr, PResult};
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;
 
@@ -69,7 +69,7 @@ impl Runtime {
 
         prototype.env.set(
             &"*ARGS*".into(),
-            Expr::List(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
+            Expr::Cons(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
         );
 
         let res = prototype.eval(

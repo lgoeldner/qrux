@@ -1,9 +1,11 @@
 #![warn(clippy::pedantic, clippy::nursery)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
+use colored::Colorize;
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
 fn main() {
+    let exception_string = "Exception".on_red();
     let mut runtime = match Runtime::new(Term::new()) {
         (_, Err(QxErr::Stop)) => return,
         (_, Err(QxErr::Fatal(e))) => {
@@ -13,7 +15,7 @@ fn main() {
 
         (r, Ok(_)) => r,
         (r, Err(e)) => {
-            eprintln!("Exception before REPL: {e}, continuing");
+            eprintln!("{exception_string}: {e}, continuing");
             r
         }
     };
@@ -26,7 +28,7 @@ fn main() {
                 eprintln!("Fatal Exception: {e:#}");
                 return;
             }
-            Err(e) => eprintln!("Exception: {e}"),
+            Err(e) => eprintln!("{exception_string}: {e:#}"),
         }
     }
 }

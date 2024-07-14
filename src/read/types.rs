@@ -1,4 +1,4 @@
-use std::{cell::RefCell, default, rc::Rc};
+use std::{any, cell::RefCell, rc::Rc};
 
 use thiserror::Error;
 
@@ -20,7 +20,6 @@ pub enum Expr {
     Int(i64),
     String(Rc<str>),
     Sym(Rc<str>),
-    List(Rc<[Expr]>),
     Bool(bool),
     Cons(Cons),
     #[default]
@@ -35,7 +34,6 @@ pub enum ExprType {
     Int,
     String,
     Sym,
-    List,
     Bool,
     Cons,
     #[default]
@@ -43,38 +41,52 @@ pub enum ExprType {
 }
 
 impl std::fmt::Display for ExprType {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "{:?}", self)
-	}
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
+
+use colored::Colorize;
 
 #[derive(Error, Debug)]
 pub enum QxErr {
     #[error("Interrupted, Stop")]
     Stop,
-    #[error("Fatal Error: {0}")]
+    #[error("FatalErr: {0:#}")]
     Fatal(#[from] Rc<QxErr>),
 
     #[error(transparent)]
     Any(#[from] anyhow::Error),
 
-    #[error("Mismatched Paren {0}")]
+    #[error("MismatchedParen {0}")]
     MismatchedParen(ParenType),
 
-    #[error("Missing Token: {0}")]
+    #[error("MissingToken: {0}")]
     MissingToken(anyhow::Error),
 
-    #[error("Wrong / Missing argument, received: {0:?}")]
-    NoArgs(Option<Cons>),
+    #[error("in {1}: ArgumentError, received: {}", 
+		.0.as_ref().map_or_else(|| "None".on_red().to_string(), ToString::to_string).red())
+	]
+    NoArgs(Option<Cons>, &'static str),
 
-    #[error("Type error, expected: {expected:?}, found: {found:?}")]
+    #[error("TypeError, expected: {expected}, found: {found}")]
     TypeErr { expected: ExprType, found: ExprType },
 
-    #[error("{0}")]
+    #[error("{0:#}")]
     LispErr(Expr),
 
-    #[error("Integer Operation Failed!")]
+    #[error("IntOpError")]
     IntOverflowErr,
+
+    #[error("TypeConvertErr from {from} to {to}")]
+    TypeConvErr { from: ExprType, to: ExprType },
+
+    #[error("TypeParseErr from {from} to {to}: {err}")]
+    TypeParseErr {
+        from: Expr,
+        to: ExprType,
+        err: anyhow::Error,
+    },
 }
 
 #[derive(Clone, Eq, PartialEq, Default)]
@@ -104,6 +116,7 @@ pub struct ConsIter {
 }
 
 impl ConsIter {
+    #[must_use]
     pub fn inner(&self) -> &Cons {
         &self.head
     }
@@ -114,43 +127,52 @@ impl ConsIter {
         Cons(self.head.0.take())
     }
 
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.head.0.is_none()
     }
 }
 
 impl Cons {
+    #[must_use]
     pub const fn nil() -> Self {
         Self(None)
     }
 
+    #[must_use]
     pub fn cdar(&self) -> Option<Expr> {
         self.cdr().car()
     }
 
-    pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Cons {
+    pub fn iter(&self) -> ConsIter {
+        self.into_iter()
+    }
+
+    pub fn collect<I: Iterator<Item = Expr> + DoubleEndedIterator>(iter: I) -> Self {
         let inner = iter.rev().fold(None, |acc, it| {
             Some(Rc::new(ConsCell {
                 car: it,
-                cdr: Cons(acc),
+                cdr: Self(acc),
             }))
         });
 
-        Cons(inner)
+        Self(inner)
     }
 
+    #[must_use]
     pub fn pair_iter(self) -> ConsExactPairIter {
         ConsExactPairIter {
             iter: self.into_iter(),
         }
     }
 
-    pub fn concat(self, other: Cons) -> Cons {
+    #[must_use]
+    pub fn concat(self, other: Self) -> Self {
         let mut result = other;
         let mut current = self.reversed();
 
         while let Some(cell) = current.0 {
-            result = Cons(Some(Rc::new(ConsCell {
+            result = Self(Some(Rc::new(ConsCell {
                 car: cell.car.clone(),
                 cdr: result,
             })));
@@ -160,25 +182,30 @@ impl Cons {
         result
     }
 
-    pub fn reversed(self) -> Cons {
-        fn do_rev(it: Cons, acc: Cons) -> Cons {
-            match it.clone() {
-                Cons(None) => acc,
-                Cons(Some(cell)) => do_rev(it.cdr(), cons(cell.car.clone(), acc)),
-            }
+    #[must_use]
+    pub fn reversed(self) -> Self {
+        let mut acc = Self(None);
+        let mut current = self;
+
+        while let Cons(Some(cell)) = current {
+            acc = cons(cell.car.clone(), acc);
+            current = cell.cdr.clone();
         }
 
-        do_rev(self, Cons(None))
+        acc
     }
 
+    #[must_use]
     pub fn car(&self) -> Option<Expr> {
         self.0.as_ref().map(|it| it.car.clone())
     }
 
-    pub fn cdr_opt(&self) -> Option<Cons> {
+    #[must_use]
+    pub fn cdr_opt(&self) -> Option<Self> {
         self.0.as_ref().map(|it| it.cdr.clone())
     }
 
+    #[must_use]
     pub fn nth(&self, n: usize) -> Option<Expr> {
         match n {
             0 => self.car(),
@@ -186,31 +213,31 @@ impl Cons {
         }
     }
 
-    /// `cdr_opt` except it returns an empty Cons instead of an Option::None
-    pub fn cdr(&self) -> Cons {
-        match self.0 {
-            Some(ref it) => it.cdr.clone(),
-            None => Cons(None),
-        }
+    /// `cdr_opt` except it returns an empty Cons instead of an `Option::None`
+    #[must_use]
+    pub fn cdr(&self) -> Self {
+        self.0
+            .as_ref()
+            .map_or_else(|| Self(None), |it| it.cdr.clone())
     }
 
+    #[must_use]
     pub fn len_is_atleast(&self, n: usize) -> bool {
         self.into_iter().take(n).count() == n
     }
 
+    #[must_use]
     pub fn len_is(&self, n: usize) -> bool {
         self.into_iter().take(n + 1).count() == n
     }
 
     #[inline]
-    pub fn new(e: impl Into<Option<Expr>>) -> Cons {
-        match e.into() {
-            Some(e) => cons(e, Cons::nil()),
-            None => Cons::nil(),
-        }
+    pub fn new(e: impl Into<Option<Expr>>) -> Self {
+        e.into().map_or_else(Self::nil, |e| cons(e, Self::nil()))
     }
 }
 
+#[must_use]
 pub fn cons(car: Expr, cdr: Cons) -> Cons {
     Cons(Some(Rc::new(ConsCell { car, cdr })))
 }
@@ -220,7 +247,7 @@ impl<T: AsRef<[Expr]>> From<T> for Cons {
         Self(list.as_ref().iter().rev().fold(None, |acc, it| {
             Some(Rc::new(ConsCell {
                 car: it.clone(),
-                cdr: Cons(acc),
+                cdr: Self(acc),
             }))
         }))
     }
@@ -232,7 +259,7 @@ impl Iterator for ConsIter {
     fn next(&mut self) -> Option<Self::Item> {
         let old_head = self.head.0.take();
 
-        self.head = Cons(old_head.as_ref().map(|it| it.cdr.0.clone()).flatten());
+        self.head = Cons(old_head.as_ref().and_then(|it| it.cdr.0.clone()));
 
         old_head.map(|it| it.car.clone())
     }
@@ -260,17 +287,18 @@ impl Expr {
     pub fn contains_sym(&self, sym: &str) -> bool {
         match self {
             Self::Sym(s) => &**s == sym,
-            Self::List(l) => l.iter().any(|ex| ex.contains_sym(sym)),
+            Self::Cons(l) => l.iter().any(|ex| ex.contains_sym(sym)),
             _ => false,
         }
     }
 
-    pub fn get_type(&self) -> ExprType {
+    #[must_use]
+    pub const fn get_type(&self) -> ExprType {
         match self {
             Self::Int(_) => ExprType::Int,
             Self::String(_) => ExprType::String,
             Self::Sym(_) => ExprType::Sym,
-            Self::List(_) => ExprType::List,
+            // Self::List(_) => ExprType::List,
             Self::Bool(_) => ExprType::Bool,
             Self::Cons(_) => ExprType::Cons,
             Self::Nil => ExprType::Nil,

@@ -26,9 +26,7 @@
 				~(slice 1 last args) ; rest of the arguments
 				~(nth last args))))) ; arguments provided in a list
 
-(defun! filter (pred list)
-	(newenv 
-		(defun! __do-filter (pred list acc)
+(defun! __do-filter (pred list acc)
 			(if (nil? list)
 				acc
 				(__do-filter 
@@ -37,7 +35,9 @@
 					(if (pred (car list))
 						(cons (car list) acc)
 						acc))))
-		(__do-filter pred list '())))
+
+(defun! filter (pred list)
+		(__do-filter pred list '()))
 
 (defun! testpred (it)
 	(> 5 (dbg it)))

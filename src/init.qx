@@ -24,7 +24,7 @@
 
 (defmacro! or (lhs rhs)
 	`(if ,lhs
-		false
+		true
 		(if ,rhs
 			true
 			false)))
@@ -98,14 +98,13 @@
 		(prn it)
 		it))
 
-(defun! __do-range (from to acc)
+(defun! _do-range (from to acc)
 	(if (from \< to)
-		(__do-range (from \+ 1) to (cons from acc))
+		(_do-range (from \+ 1) to (cons from acc))
 		(rev acc)))
 
 (defun! range (from to)
-	(__do-range from to '()))
-
+	(_do-range from to '()))
 
 (defmacro! newenv (&to-do)
 	`(let* () (do ~to-do)))
@@ -125,16 +124,22 @@
 (defmacro! timed (it)
 	`(timeit (fn* () ,it)))
 
-(defun! _ (drop)
-	nil)
+(defun! _do_map (fun it acc)
+	(if (empty? it)
+		(rev acc)
+		(_do_map 
+			fun 
+			(cdr it) 
+			(cons (fun (car it)) 
+			acc))))
 
-(mexp timeit (range 0 10000))
-
-
-
+(defun! map (fun it)
+	(_do_map fun it ()))
 
 ;; load the provided file
 (if (= 1 (count *ARGS*))
 	(do
 		(println (str "loading file: " (car *ARGS*)))
-		(loadf (car *ARGS*)))))
+		(loadf (car *ARGS*))))
+
+)

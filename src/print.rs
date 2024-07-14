@@ -14,7 +14,7 @@ impl std::fmt::Display for Cons {
 
         self.0
             .as_ref()
-            .map(|it| write_cons_inner(f, it.clone()))
+            .map(|it| write_cons_inner(f, &it))
             .transpose()?;
 
         write!(f, ")")
@@ -23,16 +23,22 @@ impl std::fmt::Display for Cons {
 
 impl std::fmt::Debug for Cons {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        <Cons as std::fmt::Display>::fmt(self, f)
+        <Self as std::fmt::Display>::fmt(self, f)
     }
 }
 
-fn write_cons_inner(f: &mut fmt::Formatter, list: Rc<ConsCell>) -> fmt::Result {
-    match &*list {
+fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result {
+    match &**list {
         ConsCell {
             ref car,
             cdr: Cons(None),
-        } => write!(f, "{car}"),
+        } => {
+            if f.alternate() {
+                write!(f, "{car:#}")
+            } else {
+                write!(f, "{car}")
+            }
+        }
 
         ConsCell {
             car,
@@ -46,45 +52,27 @@ fn write_cons_inner(f: &mut fmt::Formatter, list: Rc<ConsCell>) -> fmt::Result {
 
             write!(f, " ")?;
 
-            write_cons_inner(f, cdr.clone())
+            write_cons_inner(f, cdr)
         }
     }
 }
 
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn write_list(f: &mut std::fmt::Formatter, list: &[Expr]) -> Result<(), std::fmt::Error> {
-            write!(f, "(")?;
-
-            list.iter()
-                .map(|it| {
-                    if f.alternate() {
-                        format!("{it:#}")
-                    } else {
-                        format!("{it}")
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" ")
-                .fmt(f)?;
-
-            write!(f, ")")
-        }
-
         if f.alternate() {
             match self {
                 Self::Atom(it) => format!("{:#}", it.borrow()).fmt(f),
                 Self::Int(int) => int.to_string().fmt(f),
                 Self::Sym(sym) => write!(f, "{sym}"),
                 Self::String(string) => write!(f, "{string}"),
-                Self::List(list) => write_list(f, list),
+                // Self::List(list) => write_list(f, list),
                 Self::Nil => "nil".fmt(f),
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
                 Self::Cons(it) => {
                     write!(f, "(")?;
                     it.0.as_ref()
-                        .map(|it| write_cons_inner(f, it.clone()))
+                        .map(|it| write_cons_inner(f, &it))
                         .transpose()?;
                     write!(f, ")")
                 }
@@ -95,7 +83,7 @@ impl std::fmt::Display for Expr {
                 Self::Int(int) => int.to_string().cyan().fmt(f),
                 Self::Sym(sym) => sym.to_string().red().fmt(f),
                 Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
-                Self::List(list) => write_list(f, list),
+                // Self::List(list) => write_list(f, list),
                 Self::Nil => "nil".bold().blue().fmt(f),
                 Self::Func(_) => "<Func>".red().fmt(f),
                 Self::Closure(c) => c.to_string().red().fmt(f),

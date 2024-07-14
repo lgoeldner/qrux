@@ -1,0 +1,33 @@
+(val! start (time))
+
+(defun! max (a b)
+	(if (> a b) a b))
+
+(defun! list:max (list)
+	(_do_max list 0))
+
+(defun! _do_max (list rm)
+	(if (empty? list)
+		rm
+		(_do_max
+			(cdr list)
+			(max rm (int (car list))))))
+
+(val! inp (slurp "inp.txt"))
+
+(val! chunks
+	(str:split inp "\n\n"))
+
+(val! sums
+	(map 
+		(fn* (it)
+			(apply
+				'+
+				(map
+					int
+					(str:split it "\n")
+					)))
+		chunks))
+
+(dbg (list:max sums))
+(val! elapsed (- (time) start))

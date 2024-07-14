@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -74,7 +72,13 @@ impl core::str::FromStr for Expr {
 }
 
 fn parse(mut tokens: TokenStream) -> Result<Expr, QxErr> {
-    parse_atom(&mut tokens)
+    parse_atom(&mut tokens).and_then(|it| {
+        if tokens.is_eof() {
+            Ok(it)
+        } else {
+            Err(QxErr::MismatchedParen(ParenType::Open))
+        }
+    })
 }
 
 fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {

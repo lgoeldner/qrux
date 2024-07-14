@@ -1,6 +1,6 @@
 use crate::{
     expr,
-    read::{Cons, Expr},
+    read::{Cons},
 };
 
 #[test]

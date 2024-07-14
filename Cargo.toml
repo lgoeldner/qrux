@@ -5,11 +5,15 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[profile.dev]
+opt-level = 2
+
 [dependencies]
 anyhow = "1.0.83"
 colored = "2.1.0"
 directories-next = "2.0.0"
 reedline = "0.32.0"
 regex = "1.10.4"
+tap = "1.0.1"
 thiserror = "1.0.60"
 unescaper = "0.1.4"

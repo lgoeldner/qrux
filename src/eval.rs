@@ -1,7 +1,7 @@
 use crate::env::Env;
 use crate::read::types::closure::Closure;
 use crate::read::{Cons, ExprType};
-use crate::{expr, special_form, Apply, Func};
+use crate::{expr, special_form, Func};
 use crate::{
     read::{Expr, QxErr},
     Runtime,
@@ -59,31 +59,23 @@ struct EvalTco {
 }
 
 impl Runtime {
-    pub fn eval(&mut self, mut ast: Expr, mut env: Option<Env>) -> Result<Expr, QxErr> {
-        loop {
-            ast = self.macroexpand(ast, &env)?;
-            match ast {
-                Expr::Cons(Cons(None)) => return Ok(ast),
+    pub fn eval(&mut self, ast: Expr, env: Option<Env>) -> Result<Expr, QxErr> {
+        let ast = self.macroexpand(ast, &env)?;
 
-                Expr::Cons(list @ Cons(Some(_))) => {
-                    let ident = &list.car().ok_or(QxErr::NoArgs(None))?;
+        match ast {
+            Expr::Cons(Cons(None)) => Ok(ast),
 
-                    match self.apply(ident, list.clone(), env.clone()) {
-                        ControlFlow::Break(res) => return res,
+            Expr::Cons(list @ Cons(Some(_))) => {
+                let ident = &list.car().unwrap();
 
-                        ControlFlow::Continue(EvalTco {
-                            ast: new_ast,
-                            env: new_env,
-                        }) => {
-                            ast = new_ast;
-                            env = new_env;
-                            continue;
-                        }
-                    }
+                match self.apply(ident, list, env.clone()) {
+                    ControlFlow::Break(res) => res,
+
+                    ControlFlow::Continue(EvalTco { ast, env }) => self.eval(ast, env),
                 }
+            }
 
-                _ => return self.replace_eval(ast, env),
-            };
+            _ => self.replace_eval(ast, env),
         }
     }
 
@@ -98,7 +90,7 @@ impl Runtime {
         };
 
         let xs = lst.cdr();
-        let args = xs.clone().into_iter();
+        let args = xs.into_iter();
 
         match ident as &str {
             "val!" => special_form! {
@@ -336,7 +328,8 @@ impl Runtime {
             }),
 
             Some(err) => err!(break "Not a Function: {err:?}"),
-            None => err!(break QxErr::NoArgs(None)),
+            // None => err!(break QxErr::NoArgs(None, "function application")),
+			None => unreachable!(),
         }
     }
 
@@ -433,7 +426,7 @@ fn qq_list(elts: Cons) -> Result<Expr, QxErr> {
                 if matches!(v.car(), Some(Expr::Sym(ref s)) if &** s == "splice-unquote") {
                     acc = vec![
                         expr!(concat),
-                        v.nth(1).ok_or(QxErr::NoArgs(None))?,
+                        v.nth(1).ok_or(QxErr::NoArgs(None, "splice-unqote"))?,
                         Expr::Cons(acc.into()),
                     ];
                     continue;
