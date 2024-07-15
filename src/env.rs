@@ -2,10 +2,10 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::read::Expr;
+use crate::read::{Expr, QxErr};
 
 mod ll_core;
-pub use ll_core::core_map;
+pub use ll_core::{core_func_names, core_map, noeval};
 
 // mod core;
 // pub use core::core_map;
@@ -31,13 +31,6 @@ impl std::fmt::Debug for Inner {
 #[derive(Clone, Default, Debug)]
 pub struct Env(Rc<Inner>);
 
-impl Drop for Inner {
-    fn drop(&mut self) {
-        // TODO: solve memory leak when env is created with a closure capturing the env,
-        // creating a reference cycle
-    }
-}
-
 impl Inner {
     #[must_use]
     pub fn new_env(outer: Option<Env>) -> Env {
@@ -56,6 +49,8 @@ impl Inner {
         self.outer.as_ref().map(|it| &it.0).cloned()
     }
 }
+
+pub struct AlreadySetError;
 
 impl Env {
     #[must_use]
@@ -80,10 +75,21 @@ impl Env {
         )
     }
 
-    pub fn set(&mut self, ident: &Rc<str>, val: Expr) {
-        if &**ident != "_" {
-            self.0.data.borrow_mut().insert(Rc::clone(ident), val);
-        }
+    pub fn set(&mut self, ident: &Rc<str>, val: Expr) -> Result<Expr, QxErr> {
+        if &**ident == "_" {
+            Ok(())
+        } else {
+            let res = self.0.data.borrow_mut().insert(Rc::clone(ident), val);
+
+            match res {
+                Some(_) => Err(QxErr::ShadowErr(ident.to_string())),
+                None => Ok(()),
+            }
+        }.map(|()| Expr::Nil)
+    }
+
+    pub fn data(&self) -> &RefCell<HashMap<Rc<str>, Expr>> {
+        &self.0.data
     }
 
     #[must_use]

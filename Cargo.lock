@@ -351,6 +351,7 @@ dependencies = [
  "anyhow",
  "colored",
  "directories-next",
+ "nu-ansi-term",
  "reedline",
  "regex",
  "tap",

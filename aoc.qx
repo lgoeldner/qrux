@@ -1,3 +1,6 @@
+
+(let* ()
+
 (val! start (time))
 
 (defun! max (a b)
@@ -13,7 +16,26 @@
 			(cdr list)
 			(max rm (int (car list))))))
 
+(defun! max3 (with)
+	(_do_max3 with !!0 !!0 !!0))
+
+(defun! _do_max3 (with r1 r2 r3)
+	(if (empty? with)
+		(map deref (list r1 r2 r3))
+		(do
+			(println (str "domax3 list" with "r1" @r1 " 2 " @r2 " 3 " @r3))
+			(val! m (int (car with)))
+
+			(cond
+				((> m @r1) (reset! r1 m))
+				((> m @r2) (reset! r2 m))
+				((> m @r3) (reset! r3 m)))
+
+			(_do_max3 (cdr with) r1 r2 r3))))
+
 (val! inp (slurp "inp.txt"))
+
+(del! inp)
 
 (val! chunks
 	(str:split inp "\n\n"))
@@ -29,5 +51,9 @@
 					)))
 		chunks))
 
-(dbg (list:max sums))
+(dbg (max3 sums))
 (val! elapsed (- (time) start))
+
+)
+;; (val! out "success")
+;; (println out)

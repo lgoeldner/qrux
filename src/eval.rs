@@ -1,4 +1,5 @@
 use crate::env::Env;
+use crate::func;
 use crate::read::types::closure::Closure;
 use crate::read::{Cons, ExprType};
 use crate::{expr, special_form, Func};
@@ -9,6 +10,7 @@ use crate::{
 use anyhow::{anyhow, Context};
 use std::ops::ControlFlow;
 use std::rc::Rc;
+use tap::Pipe;
 
 // helper for error because we can't use `?`
 // needed due to ControlFlow for TCO
@@ -99,6 +101,13 @@ impl Runtime {
                     ControlFlow::Break(self.defenv(&ident, &expr, env))
                 }
             },
+            "del!" => special_form! {
+                args, "(del! <sym>)";
+                [Expr::Sym(s)] => {
+                    env.as_ref().unwrap_or(&self.env).remove(&s);
+                    break_ok!(Expr::Nil)
+                }
+            },
 
             "defmacro!" => special_form! {
                 args, "(defmacro! <name> <args> <body>)";
@@ -109,9 +118,7 @@ impl Runtime {
                         unreachable!();
                     };
 
-                    self.env.set(&ident, cl);
-
-                    break_ok!(expr!(nil))
+                    self.env.set(&ident, cl).pipe(ControlFlow::Break)
                 }
             },
 
@@ -141,7 +148,7 @@ impl Runtime {
 
             "quote" => special_form! {
                 args, "(quote <expr>)";
-                [expr] => ControlFlow::Break(Ok(expr.clone()))
+                [expr] => ControlFlow::Break(Ok(expr))
             },
 
             "qqex" => special_form! {
@@ -169,9 +176,8 @@ impl Runtime {
                     let it = peekable.next().unwrap();
                     if peekable.peek().is_none() {
                         break it;
-                    } else {
-                        early_ret!(self.eval(it, env.clone()));
                     }
+                    early_ret!(self.eval(it, env.clone()));
                 };
 
                 // return it using TCO
@@ -180,6 +186,22 @@ impl Runtime {
                     env,
                 })
             }
+
+            "export!" => func! {
+                env:env, ctx:ctx, "export!";
+                [] l @ ..  => {
+                    for ident in &l {
+                        let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::String, found: ident.get_type()})? };
+                        let Some(ex) = env.get(&s) else {
+                            Err(QxErr::NoDefErr(s))?
+                        };
+
+                        ctx.defenv(&s, &ex, None)?;
+                    }
+
+                    Expr::Nil
+                }
+            }.pipe(|it| break_ok!(it)),
 
             _ => self.apply_func(Expr::Cons(lst), env),
         }
@@ -216,13 +238,15 @@ impl Runtime {
             let mut err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
             // bind the error
-            err_env.set(
-                &catch_to_sym,
-                match e {
-                    QxErr::LispErr(e) => e,
-                    _ => Expr::String(e.to_string().into()),
-                },
-            );
+            err_env
+                .set(
+                    &catch_to_sym,
+                    match e {
+                        QxErr::LispErr(e) => e,
+                        _ => Expr::String(e.to_string().into()),
+                    },
+                )
+                .pipe(ControlFlow::Break)?;
 
             // evaluate the catch expression
             ControlFlow::Continue(EvalTco {
@@ -253,7 +277,7 @@ impl Runtime {
             };
 
             let val = self.eval(expr, Some(env.clone()));
-            env.set(&ident, early_ret!(val));
+            early_ret!(env.set(&ident, early_ret!(val)));
         }
 
         ControlFlow::Continue(EvalTco {
@@ -298,12 +322,9 @@ impl Runtime {
             })
             .collect::<Result<_, _>>();
 
-        let cl = Closure::new(
-            early_ret!(args),
-            body.clone(),
-            env.as_ref().unwrap_or(&self.env).clone(),
-            is_macro,
-        );
+        let env = env.as_ref().unwrap_or(&self.env).clone();
+
+        let cl = Closure::new(early_ret!(args), body.clone(), env, is_macro);
 
         break_ok!(Expr::Closure(Rc::new(cl)))
     }
@@ -313,10 +334,17 @@ impl Runtime {
         ast: Expr,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let new = match self.replace_eval(ast, env.clone()) {
-            Ok(Expr::Cons(new)) => new,
-            Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
-            Err(e) => return err!(break e),
+        let new = if ast_is_noeval_func(env.as_ref().unwrap_or(&self.env), &ast) {
+            match ast {
+                Expr::Cons(new) => new,
+                wrong => return err!(break "Not a List: {wrong:?}"),
+            }
+        } else {
+            match self.replace_eval(ast, env.clone()) {
+                Ok(Expr::Cons(new)) => new,
+                Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
+                Err(e) => return err!(break e),
+            }
         };
 
         match new.car() {
@@ -329,18 +357,36 @@ impl Runtime {
 
             Some(err) => err!(break "Not a Function: {err:?}"),
             // None => err!(break QxErr::NoArgs(None, "function application")),
-			None => unreachable!(),
+            None => unreachable!(),
         }
     }
 
-    fn defenv(
+    pub fn defenv(
         &mut self,
         ident: &Rc<str>,
         expr: &Expr,
         mut env: Option<Env>,
     ) -> Result<Expr, QxErr> {
         let res = self.eval(expr.clone(), env.clone())?;
-        env.as_mut().unwrap_or(&mut self.env).set(ident, res);
+        let env = env.as_mut().unwrap_or(&mut self.env);
+
+        // wether we should decrement the `env`s reference count
+        // in order to prevent a reference cycle,
+        // where the closure captures the environment it is stored in
+        let mut has_ref_cycle = false;
+
+        if let Expr::Closure(cl) = &res {
+            if Rc::ptr_eq(&cl.captured.inner(), &env.inner()) {
+                has_ref_cycle = true;
+            }
+        }
+
+        env.set(ident, res)?;
+
+        if has_ref_cycle {
+            // prevent reference cycle because the closure is stored in the same env it captures
+            unsafe { Rc::decrement_strong_count(Rc::as_ptr(&env.inner())) };
+        }
 
         Ok(Expr::Nil)
     }
@@ -354,11 +400,11 @@ impl Runtime {
                 .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
                 .or_else(|| is_special_form(&sym).then_some(expr!(sym sym.clone())))
-                .context(format!("Unbound identifier [ {sym} ]"))?,
+                .ok_or_else(|| QxErr::NoDefErr(sym))?,
 
             Expr::Cons(l) => Expr::Cons({
                 l.into_iter()
-                    .map(|it| self.eval(it.clone(), env.clone()))
+                    .map(|it| self.eval(it, env.clone()))
                     .collect::<Result<_, _>>()?
             }),
             val => val,
@@ -367,11 +413,7 @@ impl Runtime {
 
     /// Returns the macro and args to it
     /// if the AST is a list, whose first element is a macro
-    fn is_macro_call<'a>(
-        &mut self,
-        ast: &'a Expr,
-        env: &Option<Env>,
-    ) -> Option<(Rc<Closure>, Cons)> {
+    fn is_macro_call(&mut self, ast: &Expr, env: &Option<Env>) -> Option<(Rc<Closure>, Cons)> {
         if let Expr::Cons(lst) = ast {
             if let Some(Expr::Sym(sym)) = lst.car() {
                 match env.as_ref().unwrap_or(&self.env).get(&sym) {
@@ -454,5 +496,14 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
             qq_list(v.clone())
         }
         _ => Ok(ast.clone()),
+    }
+}
+
+fn ast_is_noeval_func(env: &Env, ast: &Expr) -> bool {
+    match ast {
+        Expr::Sym(s) => {
+            matches!(env.get(s), Some(Expr::Func(Func(_, _, false))))
+        }
+        _ => false,
     }
 }

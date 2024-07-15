@@ -18,8 +18,11 @@ use std::{
     time::SystemTime,
 };
 
+use anyhow::anyhow;
+
+#[macro_export]
 macro_rules! func {
-    ($(env: $env:ident,)? $(ctx: $ctx:ident,)? $name:literal;
+    ($(env: $env:pat,)? $(ctx: $ctx:pat,)? $name:literal;
 			[$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
 		Func::new_expr($name, |args: Cons, _env, _ctx| {
 				$( let $env = _env;)?
@@ -58,7 +61,7 @@ macro_rules! funcmatch {
     (
 		match $it:ident {
 			$($name:literal, [$($arg:pat),*]
-				$($rest:ident @ ..)? $(;env: $env:ident)? $(;ctx: $ctx:ident)?
+				$($rest:ident @ ..)? $(,env: $env:pat)? $(,ctx: $ctx:pat)?
 			=> $exp:expr,)*
 		}) => {
 
@@ -75,6 +78,27 @@ macro_rules! funcmatch {
 	};
 }
 
+pub fn noeval(ident: &str) -> Option<Expr> {
+    Some(match ident {
+        "export!" => func! {
+            env:env, ctx:ctx, "export!";
+            [] l @ ..  => {
+                for ident in &l {
+                    let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::String, found: ident.get_type()})? };
+                    let Some(ex) = env.get(&s) else {
+                        Err(QxErr::NoDefErr(s))?
+                    };
+
+                    ctx.defenv(&s, &ex, None)?;
+                }
+
+                Expr::Nil
+            }
+        },
+        _ => None?,
+    })
+}
+
 #[must_use]
 pub fn core_map(sym: &str) -> Option<Expr> {
     int_ops(sym)
@@ -82,6 +106,60 @@ pub fn core_map(sym: &str) -> Option<Expr> {
         .or_else(|| list_builtins(sym))
         .or_else(|| typeconvert(sym))
         .or_else(|| str_builtins(sym))
+}
+
+pub fn core_func_names() -> Vec<&'static str> {
+    vec![
+        "+",
+        "-",
+        "*",
+        "/",
+        "%",
+        ">",
+        "<",
+        ">=",
+        "<=",
+        "concat",
+        "rev",
+        "cons",
+        "car",
+        "cdr",
+        "list",
+        "count",
+        "empty?",
+        "apply",
+        "nth",
+        "=",
+        "t-eq?",
+        "t-eq",
+        "typeof",
+        "println",
+        "prn",
+        "read-string",
+        "slurp",
+        "writef",
+        "eval",
+        "*ENV*",
+        "throw",
+        "bye",
+        "fatal",
+        "atom",
+        "atom?",
+        "deref",
+        "reset!",
+        "swap!",
+        "not",
+        "time",
+        "str:len",
+        "str:split",
+        "int",
+        "str",
+        "bool",
+        "del!",
+        "val!",
+        "if",
+        "reflect:defsym",
+    ]
 }
 
 fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
@@ -151,13 +229,26 @@ fn list_builtins(ident: &str) -> Option<Expr> {
             "car", [Expr::Cons(lst)] => lst.car().unwrap_or(Expr::Nil),
             "cdr", [Expr::Cons(lst)] => Expr::Cons(lst.cdr()),
             "list", [] rest @ .. => Expr::Cons(rest),
-            "count", [Expr::Cons(lst)] => Expr::Int(lst.into_iter().count() as i64),
-			"empty?", [Expr::Cons(lst)] => Expr::Bool(lst.len_is(0)),
-			"apply", [func, Expr::Cons(args)]; env:env; ctx:ctx => {
-				ctx.eval(Expr::Cons(cons(func, args)), Some(env))?
-			},
+            "count", [Expr::Cons(lst)] => Expr::Int(lst.into_iter().count().pipe(to_i64)?),
+            "empty?", [Expr::Cons(lst)] => Expr::Bool(lst.len_is(0)),
+            "apply", [func, Expr::Cons(args)], env:env, ctx:ctx => {
+                ctx.eval(Expr::Cons(cons(func, args)), Some(env))?
+            },
+            "nth", [Expr::Int(i), Expr::Cons(c)] => {
+                c.into_iter()
+                 .nth(i.pipe(to_usize)?)
+                 .ok_or(QxErr::NoArgs(None, ""))?
+            },
         }
     }
+}
+
+fn to_i64(i: usize) -> Result<i64, QxErr> {
+    i.try_into().map_err(|_| QxErr::IntOverflowErr)
+}
+
+fn to_usize(i: i64) -> Result<usize, QxErr> {
+    i.try_into().map_err(|_| QxErr::IntOverflowErr)
 }
 
 fn builtins(ident: &str) -> Option<Expr> {
@@ -197,8 +288,9 @@ fn builtins(ident: &str) -> Option<Expr> {
                 }
             },
 
-            "eval", [ast]; env:env; ctx:ctx => ctx.eval(ast, Some(env))?,
-            "*ENV*", []; env:env => { println!("{env:#?}"); Expr::Nil },
+            "eval", [ast], env:env, ctx:ctx => ctx.eval(ast, Some(env))?,
+            "eval-noenv", [ast], env:_, ctx:ctx => ctx.eval(ast, None)?,
+            "*ENV*", [], env:env => { println!("{env:#?}"); Expr::Nil },
 
             "throw", [err] => Err(QxErr::LispErr(err))?,
             "bye", [] => Err(QxErr::Stop)?,
@@ -211,8 +303,8 @@ fn builtins(ident: &str) -> Option<Expr> {
                 inner.clone()
             },
             "reset!", [Expr::Atom(atom), new] => atom.replace(new),
-            "swap!", [Expr::Atom(atom), cl @ Expr::Closure(_)] args @ ..;
-                env:env; ctx:ctx => {
+            "swap!", [Expr::Atom(atom), cl @ Expr::Closure(_)] args @ ..,
+                env:env, ctx:ctx => {
                     let res = ctx.eval(
                         Expr::Cons(
                             cons(cl, cons(atom.take(), args))
@@ -233,6 +325,26 @@ fn builtins(ident: &str) -> Option<Expr> {
                     .try_into()
                     .map_err(|it: TryFromIntError| QxErr::Any(it.into()))?
             ),
+
+            // move to the global env
+            // "export!", [] l @ .., env:env, ctx:ctx => {
+                // for ident in &l {
+                //     let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::String, found: ident.get_type()})? };
+                //     let Some(ex) = env.get(&s) else {
+                //         Err(QxErr::NoDefErr(s))?
+                //     };
+
+                //     ctx.defenv(&s, &ex, None)?;
+                // }
+
+                // Expr::Nil
+            // },
+
+            // get all defined symbols
+            "reflect:defsym", [], env:env => {
+                let y = env.data().borrow();
+                y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::Cons)
+            },
         }
     }
 }

@@ -13,16 +13,16 @@ mod stream;
 pub mod expr_macro;
 pub mod types;
 
+/// Split input into tokens
+/// for reader macros:
+///   - !! : creates an atom
+///   - @ : dereference an atom
+///   - \ : do infix notation, similar to haskell, see `parse_list`
+///   - ' : quote
+///   - ` : quasiquoting:
+///     - ~ : splice-unquote
+///     - , : unquote
 pub fn tokenize(input: &str) -> TokenStream {
-    /// Split input into tokens
-    /// for reader macros:
-    ///   - !! : creates an atom
-    ///   - @ : dereference an atom
-    ///   - \ : do infix notation, similar to haskell, see `parse_list`
-    ///   - ' : quote
-    ///   - ` : quasiquoting:
-    ///     - ~ : splice-unquote
-    ///     - , : unquote
     static RE: Lazy<Regex> = Lazy::new(|| {
         // old: [\s,]*((!!)|,|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)
         Regex::new(

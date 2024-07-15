@@ -1,21 +1,20 @@
-#![warn(clippy::pedantic, clippy::nursery)]
-#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 
 use colored::Colorize;
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
-fn main() {
-    let exception_string = "Exception".on_red();
+fn main() -> Result<(), ()> {
+    let exception = "Exception".on_red();
     let mut runtime = match Runtime::new(Term::new()) {
-        (_, Err(QxErr::Stop)) => return,
+        (_, Err(QxErr::Stop)) => return Err(()),
         (_, Err(QxErr::Fatal(e))) => {
-            eprintln!("Fatal Exception before REPL: {e:#}");
-            return;
+            let fatal_exception = "Fatal Exception".on_red();
+            eprintln!("{fatal_exception} before REPL: {e:#}");
+            return Err(());
         }
 
         (r, Ok(_)) => r,
         (r, Err(e)) => {
-            eprintln!("{exception_string}: {e}, continuing");
+            eprintln!("{exception}: {e}, continuing");
             r
         }
     };
@@ -23,12 +22,12 @@ fn main() {
     loop {
         match rep(&mut runtime) {
             Ok(()) => {}
-            Err(QxErr::Stop) => return,
+            Err(QxErr::Stop) => return Ok(()),
             Err(QxErr::Fatal(e)) => {
                 eprintln!("Fatal Exception: {e:#}");
-                return;
+                return Err(());
             }
-            Err(e) => eprintln!("{exception_string}: {e:#}"),
+            Err(e) => eprintln!("{exception}: {e:#}"),
         }
     }
 }

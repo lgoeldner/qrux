@@ -87,6 +87,12 @@ pub enum QxErr {
         to: ExprType,
         err: anyhow::Error,
     },
+
+	#[error("ShadowErr: tried to shadow {0}, use Atom instead!")]
+	ShadowErr(String),
+
+	#[error("NoDefErr: {0} is not defined!")]
+	NoDefErr(Rc<str>),
 }
 
 #[derive(Clone, Eq, PartialEq, Default)]

@@ -41,13 +41,12 @@
 (defun! loadf (path)
 	(rep
 		(str 
-			"(do" 
+			"(do\n" 
 			(slurp path)
-			")")))
+			"\n)")))
 
-; returns a curried function
 ; swaps the order of two arguments
-(defun! swap (func) (fn* (a b) (func b a)))
+(defun! flip (func) (fn* (a b) (func b a)))
 
 (defun! append (el to)
 	(concat to (list el)))
@@ -82,8 +81,7 @@
 	(throw (str "Not yet implemented: " message)))
 
 (defmacro! cond (&args)
-	(let* ( 
-			first (car args)
+	(let*  (first (car args)
 			condition (car first)
 			expr (nth 1 first)
 			next (cdr args))
@@ -136,10 +134,13 @@
 (defun! map (fun it)
 	(_do_map fun it ()))
 
+(defun! loadf-exported (path)
+	(eval (read-string (str "(do " (slurp path) " (map export! (reflect:defsym)))"))))
+
 ;; load the provided file
 (if (= 1 (count *ARGS*))
 	(do
 		(println (str "loading file: " (car *ARGS*)))
-		(loadf (car *ARGS*))))
+		(loadf-exported (car *ARGS*))))
 
 )
