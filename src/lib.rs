@@ -66,8 +66,8 @@ impl Func {
     }
 
     #[inline]
-    pub fn new_expr(label: &'static str, f: FuncT) -> Expr {
-        Expr::Func(Self(label, f, false))
+    pub fn new_expr(label: &'static str, f: FuncT, noeval: bool) -> Expr {
+        Expr::Func(Self(label, f, noeval))
     }
 }
 

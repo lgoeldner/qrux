@@ -1,7 +1,7 @@
 use crate::env::Env;
 use crate::func;
 use crate::read::types::closure::Closure;
-use crate::read::{Cons, ExprType};
+use crate::read::{cons, Cons, ExprType};
 use crate::{expr, special_form, Func};
 use crate::{
     read::{Expr, QxErr},
@@ -142,7 +142,7 @@ impl Runtime {
             "let*" => special_form! {
                 args, "(let* (<sym> <expr>)+ <expr>)";
                 [Expr::Cons(bindings), to_eval] => {
-                    self.eval_do(&env, bindings, &to_eval)
+                    self.eval_let(&env, bindings, &to_eval)
                 }
             },
 
@@ -186,22 +186,6 @@ impl Runtime {
                     env,
                 })
             }
-
-            "export!" => func! {
-                env:env, ctx:ctx, "export!";
-                [] l @ ..  => {
-                    for ident in &l {
-                        let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::String, found: ident.get_type()})? };
-                        let Some(ex) = env.get(&s) else {
-                            Err(QxErr::NoDefErr(s))?
-                        };
-
-                        ctx.defenv(&s, &ex, None)?;
-                    }
-
-                    Expr::Nil
-                }
-            }.pipe(|it| break_ok!(it)),
 
             _ => self.apply_func(Expr::Cons(lst), env),
         }
@@ -258,7 +242,7 @@ impl Runtime {
         }
     }
 
-    fn eval_do(
+    fn eval_let(
         &mut self,
         env: &Option<Env>,
         new_bindings: Cons,
@@ -334,10 +318,13 @@ impl Runtime {
         ast: Expr,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let new = if ast_is_noeval_func(env.as_ref().unwrap_or(&self.env), &ast) {
+        let new = if let Some(func) = ast_is_noeval_func(env.as_ref().unwrap_or(&self.env), &ast) {
             match ast {
-                Expr::Cons(new) => new,
-                wrong => return err!(break "Not a List: {wrong:?}"),
+                Expr::Cons(new) => {
+					let cdr = new.cdr();
+					cons(func, cdr)
+				},
+                _ => unreachable!(),
             }
         } else {
             match self.replace_eval(ast, env.clone()) {
@@ -499,11 +486,16 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
     }
 }
 
-fn ast_is_noeval_func(env: &Env, ast: &Expr) -> bool {
+fn ast_is_noeval_func(env: &Env, ast: &Expr) -> Option<Expr> {
     match ast {
-        Expr::Sym(s) => {
-            matches!(env.get(s), Some(Expr::Func(Func(_, _, false))))
+        Expr::Cons(s) => {
+            if let Some(Expr::Sym(ref s)) = s.car() {
+                matches!(env.get(s), Some(Expr::Func(Func(_, _, true))))
+                    .then_some(env.get(s).unwrap())
+            } else {
+                None
+            }
         }
-        _ => false,
+        _ => None,
     }
 }

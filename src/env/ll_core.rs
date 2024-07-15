@@ -23,7 +23,7 @@ use anyhow::anyhow;
 #[macro_export]
 macro_rules! func {
     ($(env: $env:pat,)? $(ctx: $ctx:pat,)? $name:literal;
-			[$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
+			$(noeval:$_e:expr,)? [$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
 		Func::new_expr($name, |args: Cons, _env, _ctx| {
 				$( let $env = _env;)?
 				$(let $ctx = _ctx;)?
@@ -40,8 +40,12 @@ macro_rules! func {
 					Err(QxErr::NoArgs(Some(args), $name))?
 				}
 
+
+
 				Ok($exp)
-			})
+			},
+			/* hack to set noeval parameter */
+			{let mut _a = false; $(_a = $_e;)? _a})
 	};
 }
 
@@ -60,7 +64,7 @@ macro_rules! func {
 macro_rules! funcmatch {
     (
 		match $it:ident {
-			$($name:literal, [$($arg:pat),*]
+			$($name:literal, $(noeval:$_e:expr,)? [$($arg:pat),*]
 				$($rest:ident @ ..)? $(,env: $env:pat)? $(,ctx: $ctx:pat)?
 			=> $exp:expr,)*
 		}) => {
@@ -68,7 +72,7 @@ macro_rules! funcmatch {
 			match $it {
 				$(
 					$name => func! {
-						$(env: $env,)? $(ctx: $ctx,)? $name; [$($arg),*] $($rest @ ..)? => $exp
+						$(env: $env,)? $(ctx: $ctx,)? $name; $(noeval:$_e,)? [$($arg),*] $($rest @ ..)? => $exp
 					},
 				)*
 
@@ -194,11 +198,11 @@ fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
 
 fn int_ops(ident: &str) -> Option<Expr> {
     match ident {
-        "+" => Func::new_expr("+", |args, _, _| int_op(i64::checked_add, args)),
-        "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args)),
-        "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args)),
-        "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
-        "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args)),
+        "+" => Func::new_expr("+", |args, _, _| int_op(i64::checked_add, args), false),
+        "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args), false),
+        "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args), false),
+        "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args), false),
+        "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args), false),
 
         ">" => func! {">"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs > rhs) },
         "<" => func! {"<"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs < rhs) },
@@ -327,18 +331,18 @@ fn builtins(ident: &str) -> Option<Expr> {
             ),
 
             // move to the global env
-            // "export!", [] l @ .., env:env, ctx:ctx => {
-                // for ident in &l {
-                //     let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::String, found: ident.get_type()})? };
-                //     let Some(ex) = env.get(&s) else {
-                //         Err(QxErr::NoDefErr(s))?
-                //     };
+            "export!", noeval:true, [] l @ .., env:env, ctx:ctx => {
+                for ident in dbg!(&l) {
+                    let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::Sym, found: ident.get_type()})? };
+                    let Some(ex) = env.get(&s) else {
+                        Err(QxErr::NoDefErr(s))?
+                    };
 
-                //     ctx.defenv(&s, &ex, None)?;
-                // }
+                    ctx.defenv(&s, &ex, None)?;
+                }
 
-                // Expr::Nil
-            // },
+                Expr::Nil
+            },
 
             // get all defined symbols
             "reflect:defsym", [], env:env => {
@@ -364,13 +368,17 @@ fn str_builtins(ident: &str) -> Option<Expr> {
 
 fn typeconvert(ident: &str) -> Option<Expr> {
     match ident {
-        "int" => Func::new_expr("int", |args, _, _| {
-            let Some(arg) = args.car() else {
-                return Err(QxErr::NoArgs(None, "int"));
-            };
+        "int" => Func::new_expr(
+            "int",
+            |args, _, _| {
+                let Some(arg) = args.car() else {
+                    return Err(QxErr::NoArgs(None, "int"));
+                };
 
-            to_int(arg)
-        }),
+                to_int(arg)
+            },
+            false,
+        ),
         "str" => func! {"str";
             [] any @ .. =>
                 Expr::String(
@@ -383,13 +391,17 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                         .into_boxed_str().into()
                 )
         },
-        "bool" => Func::new_expr("bool", |args, _, _| {
-            let Some(arg) = args.car() else {
-                return Err(QxErr::NoArgs(None, "bool"));
-            };
+        "bool" => Func::new_expr(
+            "bool",
+            |args, _, _| {
+                let Some(arg) = args.car() else {
+                    return Err(QxErr::NoArgs(None, "bool"));
+                };
 
-            to_bool(arg)
-        }),
+                to_bool(arg)
+            },
+            false,
+        ),
 
         _ => None::<Expr>?,
     }
