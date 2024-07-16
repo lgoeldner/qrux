@@ -12,6 +12,11 @@ use std::ops::ControlFlow;
 use std::rc::Rc;
 use tap::Pipe;
 
+pub enum Shadow {
+    Yes,
+    No,
+}
+
 // helper for error because we can't use `?`
 // needed due to ControlFlow for TCO
 macro_rules! err {
@@ -98,7 +103,7 @@ impl Runtime {
             "val!" => special_form! {
                 args, "(val! <sym> <expr>)";
                 [Expr::Sym(ident), expr] => {
-                    ControlFlow::Break(self.defenv(&ident, &expr, env))
+                    ControlFlow::Break(self.defenv(&ident, &expr, env, Shadow::No))
                 }
             },
             "del!" => special_form! {
@@ -118,7 +123,7 @@ impl Runtime {
                         unreachable!();
                     };
 
-                    self.env.set(&ident, cl).pipe(ControlFlow::Break)
+                    self.env.set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
                 }
             },
 
@@ -224,11 +229,12 @@ impl Runtime {
             // bind the error
             err_env
                 .set(
-                    &catch_to_sym,
+                    catch_to_sym,
                     match e {
                         QxErr::LispErr(e) => e,
                         _ => Expr::String(e.to_string().into()),
                     },
+                    Shadow::No,
                 )
                 .pipe(ControlFlow::Break)?;
 
@@ -261,7 +267,7 @@ impl Runtime {
             };
 
             let val = self.eval(expr, Some(env.clone()));
-            early_ret!(env.set(&ident, early_ret!(val)));
+            early_ret!(env.set(ident, early_ret!(val), Shadow::No));
         }
 
         ControlFlow::Continue(EvalTco {
@@ -318,20 +324,10 @@ impl Runtime {
         ast: Expr,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-        let new = if let Some(func) = ast_is_noeval_func(env.as_ref().unwrap_or(&self.env), &ast) {
-            match ast {
-                Expr::Cons(new) => {
-					let cdr = new.cdr();
-					cons(func, cdr)
-				},
-                _ => unreachable!(),
-            }
-        } else {
-            match self.replace_eval(ast, env.clone()) {
-                Ok(Expr::Cons(new)) => new,
-                Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
-                Err(e) => return err!(break e),
-            }
+        let new = match self.replace_eval(ast, env.clone()) {
+            Ok(Expr::Cons(new)) => new,
+            Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
+            Err(e) => return err!(break e),
         };
 
         match new.car() {
@@ -353,6 +349,7 @@ impl Runtime {
         ident: &Rc<str>,
         expr: &Expr,
         mut env: Option<Env>,
+        over: Shadow,
     ) -> Result<Expr, QxErr> {
         let res = self.eval(expr.clone(), env.clone())?;
         let env = env.as_mut().unwrap_or(&mut self.env);
@@ -368,7 +365,7 @@ impl Runtime {
             }
         }
 
-        env.set(ident, res)?;
+        env.set(ident.clone(), res, over)?;
 
         if has_ref_cycle {
             // prevent reference cycle because the closure is stored in the same env it captures
@@ -483,19 +480,5 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
             qq_list(v.clone())
         }
         _ => Ok(ast.clone()),
-    }
-}
-
-fn ast_is_noeval_func(env: &Env, ast: &Expr) -> Option<Expr> {
-    match ast {
-        Expr::Cons(s) => {
-            if let Some(Expr::Sym(ref s)) = s.car() {
-                matches!(env.get(s), Some(Expr::Func(Func(_, _, true))))
-                    .then_some(env.get(s).unwrap())
-            } else {
-                None
-            }
-        }
-        _ => None,
     }
 }

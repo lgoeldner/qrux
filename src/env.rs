@@ -1,11 +1,15 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::{cell::RefCell, collections::hash_map::Entry};
 
-use crate::read::{Expr, QxErr};
+use crate::{
+    eval::Shadow,
+    read::{Expr, QxErr},
+};
 
 mod ll_core;
-pub use ll_core::{core_func_names, core_map, noeval};
+pub use ll_core::{core_func_names, core_map};
+use tap::Pipe;
 
 // mod core;
 // pub use core::core_map;
@@ -75,17 +79,19 @@ impl Env {
         )
     }
 
-    pub fn set(&mut self, ident: &Rc<str>, val: Expr) -> Result<Expr, QxErr> {
-        if &**ident == "_" {
-            Ok(())
+    /// set to the environment, returns either Expr::Nil or a ShadowError
+    pub fn set(&mut self, ident: Rc<str>, val: Expr, over: Shadow) -> Result<Expr, QxErr> {
+        if &*ident == "_" {
+            Ok(Expr::Nil)
         } else {
-            let res = self.0.data.borrow_mut().insert(Rc::clone(ident), val);
-
-            match res {
-                Some(_) => Err(QxErr::ShadowErr(ident.to_string())),
-                None => Ok(()),
+            if matches!(over, Shadow::No) && self.0.data.borrow_mut().contains_key(&ident) {
+                return Err(QxErr::ShadowErr(ident.to_string()));
             }
-        }.map(|()| Expr::Nil)
+
+            self.0.data.borrow_mut().insert(ident, val);
+
+            Ok(Expr::Nil)
+        }
     }
 
     pub fn data(&self) -> &RefCell<HashMap<Rc<str>, Expr>> {

@@ -35,7 +35,7 @@ impl std::fmt::Debug for Runtime {
 }
 
 #[derive(Clone)]
-pub struct Func(&'static str, FuncT, bool);
+pub struct Func(&'static str, FuncT);
 
 impl Eq for Func {}
 // No Closure/Func has the same type
@@ -51,10 +51,6 @@ pub struct Term {
 }
 
 impl Func {
-    pub const fn should_eval_args(&self) -> bool {
-        self.2
-    }
-
     #[inline]
     pub fn apply(
         &self,
@@ -66,8 +62,8 @@ impl Func {
     }
 
     #[inline]
-    pub fn new_expr(label: &'static str, f: FuncT, noeval: bool) -> Expr {
-        Expr::Func(Self(label, f, noeval))
+    pub fn new_expr(label: &'static str, f: FuncT) -> Expr {
+        Expr::Func(Self(label, f))
     }
 }
 
@@ -84,8 +80,9 @@ impl Runtime {
         prototype
             .env
             .set(
-                &"*ARGS*".into(),
+                "*ARGS*".into(),
                 Expr::Cons(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
+                eval::Shadow::No,
             )
             .pipe(drop);
 

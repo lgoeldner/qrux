@@ -1,6 +1,8 @@
+use anyhow::anyhow;
 use tap::Pipe;
 
 use crate::{
+    eval::Shadow,
     lazy::Lazy,
     read::{
         self,
@@ -10,20 +12,12 @@ use crate::{
     Func,
 };
 
-use std::{
-    cell::RefCell,
-    fmt::Write,
-    num::{ParseIntError, TryFromIntError},
-    rc::Rc,
-    time::SystemTime,
-};
-
-use anyhow::anyhow;
+use std::{cell::RefCell, fmt::Write, num::TryFromIntError, rc::Rc, time::SystemTime};
 
 #[macro_export]
 macro_rules! func {
     ($(env: $env:pat,)? $(ctx: $ctx:pat,)? $name:literal;
-			$(noeval:$_e:expr,)? [$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
+			[$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
 		Func::new_expr($name, |args: Cons, _env, _ctx| {
 				$( let $env = _env;)?
 				$(let $ctx = _ctx;)?
@@ -44,8 +38,7 @@ macro_rules! func {
 
 				Ok($exp)
 			},
-			/* hack to set noeval parameter */
-			{let mut _a = false; $(_a = $_e;)? _a})
+			)
 	};
 }
 
@@ -72,7 +65,7 @@ macro_rules! funcmatch {
 			match $it {
 				$(
 					$name => func! {
-						$(env: $env,)? $(ctx: $ctx,)? $name; $(noeval:$_e,)? [$($arg),*] $($rest @ ..)? => $exp
+						$(env: $env,)? $(ctx: $ctx,)? $name; [$($arg),*] $($rest @ ..)? => $exp
 					},
 				)*
 
@@ -80,27 +73,6 @@ macro_rules! funcmatch {
 			}
 			.into()
 	};
-}
-
-pub fn noeval(ident: &str) -> Option<Expr> {
-    Some(match ident {
-        "export!" => func! {
-            env:env, ctx:ctx, "export!";
-            [] l @ ..  => {
-                for ident in &l {
-                    let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::String, found: ident.get_type()})? };
-                    let Some(ex) = env.get(&s) else {
-                        Err(QxErr::NoDefErr(s))?
-                    };
-
-                    ctx.defenv(&s, &ex, None)?;
-                }
-
-                Expr::Nil
-            }
-        },
-        _ => None?,
-    })
 }
 
 #[must_use]
@@ -198,11 +170,11 @@ fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
 
 fn int_ops(ident: &str) -> Option<Expr> {
     match ident {
-        "+" => Func::new_expr("+", |args, _, _| int_op(i64::checked_add, args), false),
-        "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args), false),
-        "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args), false),
-        "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args), false),
-        "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args), false),
+        "+" => Func::new_expr("+", |args, _, _| int_op(i64::checked_add, args)),
+        "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args)),
+        "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args)),
+        "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
+        "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args)),
 
         ">" => func! {">"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs > rhs) },
         "<" => func! {"<"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs < rhs) },
@@ -236,7 +208,7 @@ fn list_builtins(ident: &str) -> Option<Expr> {
             "count", [Expr::Cons(lst)] => Expr::Int(lst.into_iter().count().pipe(to_i64)?),
             "empty?", [Expr::Cons(lst)] => Expr::Bool(lst.len_is(0)),
             "apply", [func, Expr::Cons(args)], env:env, ctx:ctx => {
-                ctx.eval(Expr::Cons(cons(func, args)), Some(env))?
+                ctx.eval(dbg!(Expr::Cons(cons(func,args))), Some(env))?
             },
             "nth", [Expr::Int(i), Expr::Cons(c)] => {
                 c.into_iter()
@@ -331,14 +303,21 @@ fn builtins(ident: &str) -> Option<Expr> {
             ),
 
             // move to the global env
-            "export!", noeval:true, [] l @ .., env:env, ctx:ctx => {
-                for ident in dbg!(&l) {
-                    let Expr::Sym(s) = ident else { Err(QxErr::TypeErr {expected: ExprType::Sym, found: ident.get_type()})? };
+            "export!", [Expr::Cons(l)], env:env, ctx:ctx => {
+                if Rc::ptr_eq(&env.inner(), &ctx.env.inner()) {
+                    Err(anyhow!("ExportError: Nowhere to Export"))?;
+                }
+
+                for ident in &l {
+                    let Expr::Sym(s) = ident else {
+                        Err(QxErr::TypeErr { expected: ExprType::Sym, found: ident.get_type() })?
+                    };
+
                     let Some(ex) = env.get(&s) else {
                         Err(QxErr::NoDefErr(s))?
                     };
 
-                    ctx.defenv(&s, &ex, None)?;
+                    ctx.defenv(&s, &ex, None, Shadow::Yes).pipe(drop);
                 }
 
                 Expr::Nil
@@ -368,17 +347,13 @@ fn str_builtins(ident: &str) -> Option<Expr> {
 
 fn typeconvert(ident: &str) -> Option<Expr> {
     match ident {
-        "int" => Func::new_expr(
-            "int",
-            |args, _, _| {
-                let Some(arg) = args.car() else {
-                    return Err(QxErr::NoArgs(None, "int"));
-                };
+        "int" => Func::new_expr("int", |args, _, _| {
+            let Some(arg) = args.car() else {
+                return Err(QxErr::NoArgs(None, "int"));
+            };
 
-                to_int(arg)
-            },
-            false,
-        ),
+            to_int(arg)
+        }),
         "str" => func! {"str";
             [] any @ .. =>
                 Expr::String(
@@ -400,7 +375,6 @@ fn typeconvert(ident: &str) -> Option<Expr> {
 
                 to_bool(arg)
             },
-            false,
         ),
 
         _ => None::<Expr>?,
