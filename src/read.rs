@@ -1,3 +1,4 @@
+use tap::Pipe;
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -13,6 +14,13 @@ mod stream;
 pub mod expr_macro;
 pub mod types;
 
+static RE: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(
+        r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|,|[^\s\[\]{}('"`,;)]*)"#,
+    )
+    .unwrap()
+});
+
 /// Split input into tokens
 /// for reader macros:
 ///   - !! : creates an atom
@@ -23,17 +31,15 @@ pub mod types;
 ///     - ~ : splice-unquote
 ///     - , : unquote
 pub fn tokenize(input: &str) -> TokenStream {
-    static RE: Lazy<Regex> = Lazy::new(|| {
-        // old: [\s,]*((!!)|,|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)
-        Regex::new(
-            r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|,|[^\s\[\]{}('"`,;)]*)"#,
-        )
-        .unwrap()
-    });
-
     RE.find_iter(input)
         .map(|it| it.as_str().trim())
         .filter(|it| !it.is_empty() && !it.starts_with(';'))
+        .collect()
+}
+
+pub fn tokenize_with_whitespace(input: &str) -> TokenStream {
+    RE.find_iter(input)
+        .map(|it| it.as_str())
         .collect()
 }
 

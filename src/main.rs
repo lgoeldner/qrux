@@ -1,4 +1,3 @@
-
 use colored::Colorize;
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 

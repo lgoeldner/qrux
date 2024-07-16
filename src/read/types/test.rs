@@ -1,7 +1,4 @@
-use crate::{
-    expr,
-    read::{Cons},
-};
+use crate::{expr, read::Cons};
 
 #[test]
 fn test_cdr_car() {

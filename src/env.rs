@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::rc::Rc;
-use std::{cell::RefCell, collections::hash_map::Entry};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     eval::Shadow,
@@ -31,7 +29,6 @@ impl std::fmt::Debug for Inner {
             .finish()
     }
 }
-
 #[derive(Clone, Default, Debug)]
 pub struct Env(Rc<Inner>);
 

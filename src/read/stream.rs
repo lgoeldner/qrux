@@ -14,17 +14,24 @@ impl std::fmt::Debug for Backup {
     }
 }
 
-impl TokenStream<'_> {
-    pub fn next(&mut self) -> Option<&str> {
+impl<'a> Iterator for TokenStream<'a> {
+    type Item = &'a str;
+    fn next(&mut self) -> Option<Self::Item> {
         (self.pos < self.tokens.len()).then(|| {
             self.pos += 1;
             self.tokens[self.pos - 1]
         })
     }
+}
 
-	pub fn is_eof(&self) -> bool {
-		self.pos >= self.tokens.len()
-	}
+impl TokenStream<'_> {
+    pub fn prev(&self) -> Option<&str> {
+        self.tokens.get(self.pos.checked_sub(2)?).copied()
+    }
+    
+    pub fn is_eof(&self) -> bool {
+        self.pos >= self.tokens.len()
+    }
 
     pub const fn save(&self) -> Backup {
         Backup(self.pos)

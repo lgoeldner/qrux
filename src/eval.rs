@@ -1,17 +1,14 @@
-use crate::env::Env;
-use crate::func;
-use crate::read::types::closure::Closure;
-use crate::read::{cons, Cons, ExprType};
-use crate::{expr, special_form, Func};
 use crate::{
-    read::{Expr, QxErr},
-    Runtime,
+    env::Env,
+    expr, func,
+    read::{types::closure::Closure, Cons, Expr, ExprType, QxErr},
+    special_form, Func, Runtime,
 };
 use anyhow::{anyhow, Context};
-use std::ops::ControlFlow;
-use std::rc::Rc;
+use std::{ops::ControlFlow, rc::Rc};
 use tap::Pipe;
 
+#[derive(Clone, Copy)]
 pub enum Shadow {
     Yes,
     No,

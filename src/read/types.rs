@@ -64,7 +64,7 @@ pub enum QxErr {
     #[error("MissingToken: {0}")]
     MissingToken(anyhow::Error),
 
-    #[error("in {1}: ArgumentError, received: {}", 
+    #[error("in {1}: ArgumentError, received: {}",
 		.0.as_ref().map_or_else(|| "None".on_red().to_string(), ToString::to_string).red())
 	]
     NoArgs(Option<Cons>, &'static str),
@@ -88,11 +88,11 @@ pub enum QxErr {
         err: anyhow::Error,
     },
 
-	#[error("ShadowErr: tried to shadow {0}, use Atom instead!")]
-	ShadowErr(String),
+    #[error("ShadowErr: tried to shadow {0}, use Atom instead!")]
+    ShadowErr(String),
 
-	#[error("NoDefErr: {0} is not defined!")]
-	NoDefErr(Rc<str>),
+    #[error("NoDefErr: {0} is not defined!")]
+    NoDefErr(Rc<str>),
 }
 
 #[derive(Clone, Eq, PartialEq, Default)]
@@ -123,7 +123,7 @@ pub struct ConsIter {
 
 impl ConsIter {
     #[must_use]
-    pub fn inner(&self) -> &Cons {
+    pub const fn inner(&self) -> &Cons {
         &self.head
     }
 }
@@ -335,8 +335,9 @@ impl std::fmt::Debug for Expr {
         write!(f, "{self}")
     }
 }
-
+    
 pub struct Input(pub Rc<str>);
+
 impl Input {
     pub fn get(ctx: &mut crate::Term) -> PResult<Self> {
         Ok(Self(super::get_inp(ctx)?.into()))

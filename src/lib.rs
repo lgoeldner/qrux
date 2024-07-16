@@ -6,7 +6,7 @@
 )]
 // #![feature(try_trait_v2)]
 
-use std::{path::PathBuf, vec};
+use std::{collections::HashSet, path::PathBuf, vec};
 
 use reedline::{
     Completer, DefaultCompleter, DefaultHinter, DefaultPrompt, DefaultPromptSegment,
@@ -137,9 +137,7 @@ impl Term {
         let history = Box::new(FileBackedHistory::with_file(50, dir).unwrap());
         let commands = env::core_func_names();
 
-        // TODO: Write custom highlighter
-        let highlighter = exh::ExampleHighlighter::new(commands)
-            .tap_mut(|it| it.change_colors(Color::LightPurple, Color::Cyan, Color::Cyan));
+        let highlighter = highlighter::Lisp::new(commands);
 
         Self {
             prompt: DefaultPrompt {
@@ -160,88 +158,85 @@ pub mod lazy;
 pub mod print;
 pub mod read;
 
-mod exh {
+mod highlighter {
+    use std::collections::HashSet;
+
+    use crate::read;
     use nu_ansi_term::{Color, Style};
     use reedline::Highlighter;
     use reedline::StyledText;
+    use tap::prelude::*;
 
     pub static DEFAULT_BUFFER_MATCH_COLOR: Color = Color::Green;
     pub static DEFAULT_BUFFER_NEUTRAL_COLOR: Color = Color::White;
     pub static DEFAULT_BUFFER_NOT_MATCH_COLOR: Color = Color::Red;
 
     /// A simple, example highlighter that shows how to highlight keywords
-    pub struct ExampleHighlighter {
-        external_commands: Vec<&'static str>,
-        match_color: Color,
-        not_match_color: Color,
-        neutral_color: Color,
+    pub struct Lisp {
+        keywords: HashSet<&'static str>,
     }
 
-    impl Highlighter for ExampleHighlighter {
+    impl Highlighter for Lisp {
         fn highlight(&self, line: &str, _cursor: usize) -> StyledText {
+            let paren_color = Color::LightGreen;
+            let kw_color = Color::Blue;
+            let fn_color = Color::Red;
+            let neutral_color = Color::Yellow;
+
             let mut styled_text = StyledText::new();
 
-            if self.external_commands.iter().any(|x| line.contains(x)) {
-                let matches: Vec<&str> = self
-                    .external_commands
-                    .iter()
-                    .filter(|c| line.contains(*c))
-                    .map(std::ops::Deref::deref)
-                    .collect();
+            let mut tokens = read::tokenize_with_whitespace(line);
 
-                let longest_match = matches
-                    .iter()
-                    .map(|it| (it, it.len()))
-                    .max_by_key(|(_, k)| *k)
-                    .map_or("", |(it, _)| it);
+            loop {
+                let Some(token) = tokens.next() else {
+                    break;
+                };
 
-                let buffer_split: Vec<&str> = line.splitn(2, &longest_match).collect();
+                match token.trim() {
+                    // skip a quoted list
+                    "(" if matches!(tokens.prev().map(str::trim), Some("'")) => {
+                        styled_text.push((Style::from(paren_color), token.to_string()));
+                        let mut stack = 1;
+                        loop {
+                            let Some(t) = tokens.next() else { break };
 
-                styled_text.push((
-                    Style::new().fg(self.neutral_color),
-                    buffer_split[0].to_string(),
-                ));
+                            match t.trim() {
+                                ")" => stack -= 1,
+                                "(" => stack += 1,
+                                _ => (),
+                            }
 
-                styled_text.push((Style::new().fg(self.match_color), longest_match.to_string()));
+                            if stack <= 0 {
+                                break;
+                            }
 
-                styled_text.push((
-                    Style::new().bold().fg(self.neutral_color),
-                    buffer_split[1].to_string(),
-                ));
-            } else if self.external_commands.is_empty() {
-                styled_text.push((Style::new().fg(self.neutral_color), line.to_string()));
-            } else {
-                styled_text.push((Style::new().fg(self.not_match_color), line.to_string()));
+                            styled_text.push((Style::from(Color::LightMagenta), t.to_string()));
+                        }
+
+                        tokens.back();
+                    }
+                    "(" | ")" => styled_text.push((Style::from(paren_color), token.to_string())),
+                    _ if matches!(tokens.prev().map(str::trim), Some("(")) => {
+                        styled_text.push((Style::from(fn_color), token.to_string()));
+                    }
+                    _ => styled_text.push((Style::from(neutral_color), token.to_string())),
+                }
             }
 
             styled_text
         }
     }
 
-    impl ExampleHighlighter {
+    impl Lisp {
         /// Construct the default highlighter with a given set of extern commands/keywords to detect and highlight
         pub fn new(external_commands: Vec<&'static str>) -> Self {
             Self {
-                external_commands,
-                match_color: DEFAULT_BUFFER_MATCH_COLOR,
-                not_match_color: DEFAULT_BUFFER_NOT_MATCH_COLOR,
-                neutral_color: DEFAULT_BUFFER_NEUTRAL_COLOR,
+                keywords: HashSet::from_iter(external_commands),
             }
         }
-
-        /// Configure the highlighter to use different colors
-        pub fn change_colors(
-            &mut self,
-            match_color: Color,
-            notmatch_color: Color,
-            neutral_color: Color,
-        ) {
-            self.match_color = match_color;
-            self.not_match_color = notmatch_color;
-            self.neutral_color = neutral_color;
-        }
     }
-    impl Default for ExampleHighlighter {
+
+    impl Default for Lisp {
         fn default() -> Self {
             Self::new(vec![])
         }

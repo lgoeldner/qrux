@@ -366,16 +366,13 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                         .into_boxed_str().into()
                 )
         },
-        "bool" => Func::new_expr(
-            "bool",
-            |args, _, _| {
-                let Some(arg) = args.car() else {
-                    return Err(QxErr::NoArgs(None, "bool"));
-                };
+        "bool" => Func::new_expr("bool", |args, _, _| {
+            let Some(arg) = args.car() else {
+                return Err(QxErr::NoArgs(None, "bool"));
+            };
 
-                to_bool(arg)
-            },
-        ),
+            to_bool(arg)
+        }),
 
         _ => None::<Expr>?,
     }
