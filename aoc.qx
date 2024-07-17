@@ -1,6 +1,3 @@
-
-(let* ()
-
 (val! start (time))
 
 (defun! max (a b)
@@ -19,23 +16,20 @@
 (defun! max3 (with)
 	(_do_max3 with !!0 !!0 !!0))
 
-(defun! _do_max3 (with r1 r2 r3)
-	(if (empty? with)
+(defun! _do_max3 (lst r1 r2 r3)
+	(if (empty? lst)
 		(map deref (list r1 r2 r3))
 		(do
-			(println (str "domax3 list" with "r1" @r1 " 2 " @r2 " 3 " @r3))
-			(val! m (int (car with)))
+			(val! m (int (car lst)))
 
 			(cond
-				((> m @r1) (reset! r1 m))
-				((> m @r2) (reset! r2 m))
-				((> m @r3) (reset! r3 m)))
+				((> m @r1) (do (reset! r3 @r2) (reset! r2 @r1) (reset! r1 m)))
+				((> m @r2) (do (reset! r3 @r2) (reset! r2 m)))
+				((> m @r3) (do (reset! r3 m))))
 
-			(_do_max3 (cdr with) r1 r2 r3))))
+			(_do_max3 (cdr lst) r1 r2 r3))))
 
 (val! inp (slurp "inp.txt"))
-
-(del! inp)
 
 (val! chunks
 	(str:split inp "\n\n"))
@@ -54,6 +48,5 @@
 (dbg (max3 sums))
 (val! elapsed (- (time) start))
 
-)
-;; (val! out "success")
-;; (println out)
+(println (str elapsed "ms"))
+(bye)

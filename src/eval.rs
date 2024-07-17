@@ -6,7 +6,7 @@ use crate::{
 };
 use anyhow::{anyhow, Context};
 use std::{ops::ControlFlow, rc::Rc};
-use tap::Pipe;
+use tap::{Pipe, Tap};
 
 #[derive(Clone, Copy)]
 pub enum Shadow {
@@ -63,23 +63,34 @@ struct EvalTco {
 }
 
 impl Runtime {
-    pub fn eval(&mut self, ast: Expr, env: Option<Env>) -> Result<Expr, QxErr> {
-        let ast = self.macroexpand(ast, &env)?;
+    pub fn eval(&mut self, mut in_ast: Expr, mut env: Option<Env>) -> Result<Expr, QxErr> {
+        // loop for TCO
+        loop {
+            let ast = self.macroexpand(in_ast, &env)?;
+            // by default, break the result out of the loop
+            break match ast {
+                Expr::Cons(Cons(None)) => Ok(ast),
 
-        match ast {
-            Expr::Cons(Cons(None)) => Ok(ast),
+                Expr::Cons(ref list @ Cons(Some(_))) => {
+                    let ident = &list.car().unwrap();
 
-            Expr::Cons(list @ Cons(Some(_))) => {
-                let ident = &list.car().unwrap();
+                    match self.apply(ident, list.clone(), env.clone()) {
+                        ControlFlow::Break(res) => res,
 
-                match self.apply(ident, list, env.clone()) {
-                    ControlFlow::Break(res) => res,
+                        ControlFlow::Continue(EvalTco {
+                            ast: ast_n,
+                            env: env_n,
+                        }) => {
+                            in_ast = ast_n;
+                            env = env_n;
 
-                    ControlFlow::Continue(EvalTco { ast, env }) => self.eval(ast, env),
+                            continue;
+                        }
+                    }
                 }
-            }
 
-            _ => self.replace_eval(ast, env),
+                _ => self.replace_eval(ast, env),
+            };
         }
     }
 
@@ -122,6 +133,11 @@ impl Runtime {
 
                     self.env.set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
                 }
+            },
+
+            "mexp" => special_form! {
+                args, "(mexp <macro> <&args>)";
+                [] ..it => ControlFlow::Break(self.macroexpand(Expr::Cons(it), &env))
             },
 
             "try*" => special_form! {

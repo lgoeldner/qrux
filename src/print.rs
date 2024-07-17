@@ -79,7 +79,7 @@ impl std::fmt::Display for Expr {
             }
         } else {
             match self {
-                Self::Atom(it) => format!("<Atom> ({})", it.borrow()).fmt(f),
+                Self::Atom(it) => format!("<Atom ({})>", it.borrow()).fmt(f),
                 Self::Int(int) => int.to_string().cyan().fmt(f),
                 Self::Sym(sym) => sym.to_string().red().fmt(f),
                 Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
@@ -99,9 +99,9 @@ impl fmt::Display for Closure {
         if f.alternate() {
             "".fmt(f)
         } else if self.is_macro {
-            write!(f, "<Macro> ({})", self.args_name.join(" "))
+            write!(f, "<macro ({})>", self.args_name.join(" "))
         } else {
-            write!(f, "<Closure> ({})", self.args_name.join(" "))
+            write!(f, "<fn* ({})>", self.args_name.join(" "))
         }
     }
 }

@@ -2,6 +2,9 @@
 
 (val! t true)
 
+(defmacro! export-all! () 
+	(export! (reflect:defsym)))
+
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
 
@@ -135,7 +138,13 @@
 	(_do_map fun it ()))
 
 (defun! loadf-exported (path)
-	(eval (read-string (str "(do " (slurp path) " (map export! (reflect:defsym)))"))))
+	(eval (read-string (str "(do " (slurp path) " (export! (reflect:defsym)))"))))
+
+(defmacro! list:iter (ident in lst body)
+	(do 
+		(assert (= in 'in))
+	   `(map (fn* (,ident) ,body) ,lst)))
+
 
 ;; load the provided file
 (if (= 1 (count *ARGS*))

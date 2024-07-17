@@ -1,10 +1,11 @@
 use colored::Colorize;
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
+
 fn main() -> Result<(), ()> {
     let exception = "Exception".on_red();
     let mut runtime = match Runtime::new(Term::new()) {
-        (_, Err(QxErr::Stop)) => return Err(()),
+        (_, Err(QxErr::Stop)) => return Ok(()),
         (_, Err(QxErr::Fatal(e))) => {
             let fatal_exception = "Fatal Exception".on_red();
             eprintln!("{fatal_exception} before REPL: {e:#}");
