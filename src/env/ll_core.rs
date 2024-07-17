@@ -208,7 +208,7 @@ fn list_builtins(ident: &str) -> Option<Expr> {
             "count", [Expr::Cons(lst)] => Expr::Int(lst.into_iter().count().pipe(to_i64)?),
             "empty?", [Expr::Cons(lst)] => Expr::Bool(lst.len_is(0)),
             "apply", [func, Expr::Cons(args)], env:env, ctx:ctx => {
-                ctx.eval(dbg!(Expr::Cons(cons(func,args))), Some(env))?
+                ctx.eval(Expr::Cons(cons(func,args)), Some(env))?
             },
             "nth", [Expr::Int(i), Expr::Cons(c)] => {
                 c.into_iter()

@@ -182,20 +182,33 @@ mod highlighter {
             let kw_color = Color::Blue;
             let fn_color = Color::Red;
             let neutral_color = Color::Yellow;
-
+            let num_color = Color::Magenta;
+            let str_color = Color::Green;
+            let bool_color = Color::Blue;
+            let nil_color = Color::LightBlue;
             let mut styled_text = StyledText::new();
-
             let mut tokens = read::tokenize_with_whitespace(line);
+            let paren_colors = [Color::Yellow, Color::Purple, Color::Blue, Color::Yellow];
+            
+            let mut paren_depth: i32 = 0;
 
             loop {
                 let Some(token) = tokens.next() else {
                     break;
                 };
-
-                match token.trim() {
+                
+                let trimmed = token.trim();
+                
+                match trimmed {
+                    "(" => paren_depth += 1,
+                    ")" => paren_depth -= 1,
+                    _ => {}
+                }
+                
+                match trimmed {
                     // skip a quoted list
                     "(" if matches!(tokens.prev().map(str::trim), Some("'")) => {
-                        styled_text.push((Style::from(paren_color), token.to_string()));
+                        styled_text.push((Style::from(paren_colors[paren_depth.unsigned_abs() as usize % 3]), token.to_string()));
                         let mut stack = 1;
                         loop {
                             let Some(t) = tokens.next() else { break };
@@ -210,12 +223,22 @@ mod highlighter {
                                 break;
                             }
 
-                            styled_text.push((Style::from(Color::LightMagenta), t.to_string()));
+                            styled_text.push((Style::from(neutral_color), t.to_string()));
                         }
 
                         tokens.back();
                     }
-                    "(" | ")" => styled_text.push((Style::from(paren_color), token.to_string())),
+
+                    "(" | ")" => styled_text.push((Style::from(paren_colors[paren_depth.unsigned_abs() as usize % 3]), token.to_string())),
+                    
+                    string if string.starts_with('"') => styled_text.push((Style::from(str_color), token.to_string())),
+                    num if num.parse::<i64>().is_ok() => {
+                        styled_text.push((Style::from(num_color), token.to_string()));
+                    }
+                    "true" | "false" => styled_text.push((Style::from(bool_color), token.to_string())),
+                    "nil" => styled_text.push((Style::from(nil_color).bold(), token.to_string())),
+                    kw if self.keywords.contains(kw) => styled_text.push((Style::from(kw_color).bold(), token.to_string())),
+
                     _ if matches!(tokens.prev().map(str::trim), Some("(")) => {
                         styled_text.push((Style::from(fn_color), token.to_string()));
                     }
