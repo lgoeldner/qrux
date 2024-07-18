@@ -95,7 +95,6 @@ pub fn core_func_names() -> Vec<&'static str> {
         "<",
         ">=",
         "<=",
-		
         "concat",
         "rev",
         "cons",
@@ -115,13 +114,11 @@ pub fn core_func_names() -> Vec<&'static str> {
         "read-string",
         "slurp",
         "writef",
-
         "eval",
         "*ENV*",
         "throw",
         "bye",
         "fatal",
-
         "atom",
         "atom?",
         "deref",
@@ -129,30 +126,25 @@ pub fn core_func_names() -> Vec<&'static str> {
         "swap!",
         "not",
         "time",
-
         "str:len",
-        "str:split",
-
-		// types
+        "str:splitby",
+        // types
         "int",
         "str",
         "bool",
-		"str?",
-		"list?",
-		"sym?",
-
-		// special forms
+        "str?",
+        "list?",
+        "sym?",
+        // special forms
         "del!",
         "val!",
         "if",
-		"let*",
-		"do",
-		"fn*",
-		"defmacro!",
-
-		"try*",
-		"catch*",
-
+        "let*",
+        "do",
+        "fn*",
+        "defmacro!",
+        "try*",
+        "catch*",
         "reflect:defsym",
     ]
 }
@@ -224,25 +216,25 @@ fn list_builtins(ident: &str) -> Option<Expr> {
             "car", [Expr::List(lst)] => lst.car().unwrap_or(Expr::Nil),
             "cdr", [Expr::List(lst)] => Expr::List(lst.cdr()),
             "list", [] rest @ .. => Expr::List(rest),
-            "count", [Expr::List(lst)] => Expr::Int(lst.into_iter().count().pipe(to_i64)?),
+            "count", [Expr::List(lst)] => Expr::Int(lst.into_iter().count().pipe(as_i64)?),
             "empty?", [Expr::List(lst)] => Expr::Bool(lst.len_is(0)),
             "apply", [func, Expr::List(args)], env:env, ctx:ctx => {
                 ctx.eval(Expr::List(cons(func,args)), Some(env))?
             },
             "nth", [Expr::Int(i), Expr::List(c)] => {
                 c.into_iter()
-                 .nth(i.pipe(to_usize)?)
+                 .nth(i.pipe(as_usize)?)
                  .ok_or(QxErr::NoArgs(None, ""))?
             },
         }
     }
 }
 
-fn to_i64(i: usize) -> Result<i64, QxErr> {
+fn as_i64(i: usize) -> Result<i64, QxErr> {
     i.try_into().map_err(|_| QxErr::IntOverflowErr)
 }
 
-fn to_usize(i: i64) -> Result<usize, QxErr> {
+fn as_usize(i: i64) -> Result<usize, QxErr> {
     i.try_into().map_err(|_| QxErr::IntOverflowErr)
 }
 
@@ -355,7 +347,30 @@ fn str_builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident {
             "str:len", [Expr::String(s)] => Expr::Int(s.len().try_into().unwrap_or(0)),
-            "str:split", [Expr::String(s), Expr::String(sep)] => Expr::List(
+            "str:at", [Expr::String(s), Expr::Int(i)] => {
+                Expr::String(
+                    s
+                        .chars()
+                        .nth(as_usize(i)?)
+                        .map(|it| it.to_string().into())
+                        .ok_or_else(|| anyhow!("str:at: index out of bounds"))?
+                )
+            },
+
+            "str:substr", [Expr::String(string), Expr::Int(from), Expr::Int(to)] => {
+                Expr::String(
+                    string
+                        .get(as_usize(from)?..as_usize(to)?)
+                        .ok_or_else(|| anyhow!("str:substr: index out of bounds"))?
+                        .into()
+                )
+            },
+
+            "str:chars", [Expr::String(s)] => {
+                Expr::List(s.chars().map(|it| Expr::String(it.to_string().into())).collect())
+            },
+
+            "str:splitby", [Expr::String(s), Expr::String(sep)] => Expr::List(
                 s.split(&*sep)
                  .map(|it| Expr::String(it.into()))
                  .collect::<Cons>()

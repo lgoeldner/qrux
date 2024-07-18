@@ -10,8 +10,7 @@ pub mod closure;
 pub mod typing;
 pub use closure::Closure;
 
-/// cheap to clone, only contains small values (with copy)
-/// or `Rc`s
+/// cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
     Atom(Rc<RefCell<Expr>>),
