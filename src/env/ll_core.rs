@@ -259,7 +259,7 @@ fn builtins(ident: &str) -> Option<Expr> {
             "prn", [expr] => { println!("{expr}"); Expr::Nil },
 
             "read-string", [Expr::String(s)] => {
-                read::Input(Rc::clone(&s)).tokenize().try_into()?
+                read::Input(s.clone()).tokenize().try_into()?
             },
             "slurp", [Expr::String(s)] => {
                 Expr::String(
@@ -398,7 +398,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                             .map(|()| acc)
                         })
                         .map_err(|it| QxErr::Any(it.into()))?
-                        .into_boxed_str().into()
+                        .into()
                 )
         },
         "str?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::String(_))) },

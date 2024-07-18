@@ -5,6 +5,7 @@ use crate::{
     special_form, Func, Runtime,
 };
 use anyhow::{anyhow, Context};
+use ecow::EcoString;
 use std::{ops::ControlFlow, rc::Rc};
 use tap::{Pipe, Tap};
 
@@ -326,7 +327,7 @@ impl Runtime {
         let args = args
             .into_iter()
             .map(|it| match it {
-                Expr::Sym(s) => Ok(Rc::clone(&s)),
+                Expr::Sym(s) => Ok(s),
                 _ => Err(QxErr::Any(anyhow!("Not a symbol: {it:?}"))),
             })
             .collect::<Result<_, _>>();
@@ -365,7 +366,7 @@ impl Runtime {
 
     pub fn defenv(
         &mut self,
-        ident: &Rc<str>,
+        ident: &EcoString,
         expr: &Expr,
         mut env: Option<Env>,
         over: Shadow,

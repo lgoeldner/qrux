@@ -1,5 +1,6 @@
 use std::{any, cell::RefCell, rc::Rc};
 
+use ecow::EcoString;
 use thiserror::Error;
 
 use crate::Func;
@@ -17,8 +18,8 @@ pub enum Expr {
     Closure(Rc<Closure>),
     Func(Func),
     Int(i64),
-    String(Rc<str>),
-    Sym(Rc<str>),
+    String(EcoString),
+    Sym(EcoString),
     Bool(bool),
     List(Cons),
     #[default]
@@ -88,10 +89,10 @@ pub enum QxErr {
     },
 
     #[error("ShadowErr: tried to shadow `{0}`, use Atom instead!")]
-    ShadowErr(String),
+    ShadowErr(EcoString),
 
     #[error("NoDefErr: `{0}` is not defined!")]
-    NoDefErr(Rc<str>),
+    NoDefErr(EcoString),
 }
 
 #[derive(Clone, Eq, PartialEq, Default)]
@@ -335,7 +336,7 @@ impl std::fmt::Debug for Expr {
     }
 }
 
-pub struct Input(pub Rc<str>);
+pub struct Input(pub EcoString);
 
 impl Input {
     pub fn get(ctx: &mut crate::Term) -> PResult<Self> {

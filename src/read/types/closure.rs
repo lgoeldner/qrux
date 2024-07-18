@@ -1,12 +1,14 @@
 use std::rc::Rc;
 
+use ecow::EcoString;
+
 use crate::env::Env;
 
 use super::{Cons, Expr, QxErr};
 
 #[derive(Clone, Debug)]
 pub struct Closure {
-    pub args_name: Box<[Rc<str>]>,
+    pub args_name: Box<[EcoString]>,
     pub body: Expr,
     pub captured: Env,
     pub is_macro: bool,
@@ -21,7 +23,7 @@ impl PartialEq for Closure {
 
 impl Closure {
     #[must_use]
-    pub fn new(args_name: Vec<Rc<str>>, body: Expr, captured: Env, is_macro: bool) -> Self {
+    pub fn new(args_name: Vec<EcoString>, body: Expr, captured: Env, is_macro: bool) -> Self {
         Self {
             args_name: args_name.into(),
             body,

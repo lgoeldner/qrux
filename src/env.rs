@@ -6,6 +6,7 @@ use crate::{
 };
 
 mod ll_core;
+use ecow::EcoString;
 pub use ll_core::{core_func_names, core_map};
 use tap::Pipe;
 
@@ -18,7 +19,7 @@ use tap::Pipe;
 #[derive(Clone, Default)]
 pub struct Inner {
     pub(crate) outer: Option<Env>,
-    pub(crate) data: RefCell<HashMap<Rc<str>, Expr>>,
+    pub(crate) data: RefCell<HashMap<EcoString, Expr>>,
 }
 
 impl std::fmt::Debug for Inner {
@@ -77,11 +78,11 @@ impl Env {
     }
 
     /// set to the environment, returns either Expr::Nil or a ShadowError
-    pub fn set(&mut self, ident: Rc<str>, val: Expr, over: Shadow) -> Result<Expr, QxErr> {
+    pub fn set(&mut self, ident: EcoString, val: Expr, over: Shadow) -> Result<Expr, QxErr> {
         if &*ident != "_" {
             if matches!(over, Shadow::No) && self.0.data.borrow_mut().contains_key(&ident) {
 				eprintln!("{ident} already set");
-                return Err(QxErr::ShadowErr(ident.to_string()));
+                return Err(QxErr::ShadowErr(ident));
             }
 
             self.0.data.borrow_mut().insert(ident, val);
@@ -90,7 +91,7 @@ impl Env {
         Ok(Expr::Nil)
     }
 
-    pub fn data(&self) -> &RefCell<HashMap<Rc<str>, Expr>> {
+    pub fn data(&self) -> &RefCell<HashMap<EcoString, Expr>> {
         &self.0.data
     }
 

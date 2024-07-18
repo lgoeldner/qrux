@@ -1,3 +1,4 @@
+use ecow::EcoString;
 use tap::Pipe;
 pub use types::*;
 
@@ -56,7 +57,7 @@ pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<Expr> {
 }
 
 #[allow(dead_code)]
-pub(crate) fn from_string(s: std::rc::Rc<str>) -> PResult<Expr> {
+pub(crate) fn from_string(s: EcoString) -> PResult<Expr> {
     Input(s).tokenize().try_into()
 }
 
@@ -71,7 +72,7 @@ impl core::str::FromStr for Expr {
     type Err = QxErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Input(std::convert::Into::<Box<str>>::into(s).into())
+        Input(s.into())
             .tokenize()
             .try_into()
     }
