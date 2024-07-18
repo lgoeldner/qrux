@@ -21,7 +21,7 @@ macro_rules! expr {
     };
 
     (cons $($it:expr),*) => {
-        $crate::Expr::Cons($crate::read::types::Cons::from(&[$($it), *]))
+        $crate::Expr::List($crate::read::types::Cons::from(&[$($it), *]))
     };
 
     (nil) => {

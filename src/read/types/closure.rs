@@ -41,7 +41,7 @@ impl Closure {
 
         while let Some(name) = names.next() {
             if names.peek().is_none() && has_varargs {
-                insert_env(name[1..].into(), Expr::Cons(args));
+                insert_env(name[1..].into(), Expr::List(args));
 
                 break;
             }

@@ -36,7 +36,7 @@
 
 (defun! rep (str)
 	(eval
-		(read-string str)))
+		(read-string (del! str))))
 
 ; load a file and execute it with a do block wrapped around
 (defun! loadf (path)
@@ -58,9 +58,6 @@
 (val! lt <)
 (val! gt >)
 (val! eq =)
-
-(defmacro! := (atom set_to)
-	`(do (reset! ,atom ,set_to) nil))
 
 (defmacro! assert (cond)
 	`(if (= ,cond true)
@@ -136,19 +133,17 @@
 	(_do_map fun it ()))
 
 (defun! loadf-exported (path)
-	(eval (read-string (str "(do " (slurp path) " (export! (reflect:defsym)))"))))
+	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
 
-(defmacro! list:iter (ident in lst body)
+(defmacro! list:iter (ident in lst &body)
 	(do 
 		(assert (= in 'in))
-	   `(map (fn* (,ident) ,body) ,lst)))
-
+	   `(map (fn* (,ident) (do ~body)) ,lst)))
 
 (list:iter file in *ARGS* 
-	(do
 		(println (str "loading file: " (car *ARGS*)))
-		(try* (loadf-exported (car *ARGS*))
-			(catch* ex (println (str "could not load "file": " ex))))))
+		(try* (loadf (car *ARGS*))
+			(catch* ex (println (str "could not load "file": " ex)))))
 
 ;; load the provided file
 ;; (if (= 1 (count *ARGS*))

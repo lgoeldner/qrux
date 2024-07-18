@@ -95,6 +95,7 @@ pub fn core_func_names() -> Vec<&'static str> {
         "<",
         ">=",
         "<=",
+		
         "concat",
         "rev",
         "cons",
@@ -114,11 +115,13 @@ pub fn core_func_names() -> Vec<&'static str> {
         "read-string",
         "slurp",
         "writef",
+
         "eval",
         "*ENV*",
         "throw",
         "bye",
         "fatal",
+
         "atom",
         "atom?",
         "deref",
@@ -126,14 +129,30 @@ pub fn core_func_names() -> Vec<&'static str> {
         "swap!",
         "not",
         "time",
+
         "str:len",
         "str:split",
+
+		// types
         "int",
         "str",
         "bool",
+		"str?",
+		"list?",
+		"sym?",
+
+		// special forms
         "del!",
         "val!",
         "if",
+		"let*",
+		"do",
+		"fn*",
+		"defmacro!",
+
+		"try*",
+		"catch*",
+
         "reflect:defsym",
     ]
 }
@@ -193,24 +212,24 @@ fn list_builtins(ident: &str) -> Option<Expr> {
             "concat", [] lists @ .. => {
                 lists.into_iter()
                 .map(|it| match it {
-                    Expr::Cons(it) => it,
+                    Expr::List(it) => it,
                     el => Cons::new(el),
                 })
                 .reduce(Cons::concat)
-                .map_or(Expr::Nil, Expr::Cons)
+                .map_or(Expr::Nil, Expr::List)
             },
 
-            "rev", [Expr::Cons(it)] => Expr::Cons(it.reversed()),
-            "cons", [el, Expr::Cons(lst)] => Expr::Cons(cons(el, lst)),
-            "car", [Expr::Cons(lst)] => lst.car().unwrap_or(Expr::Nil),
-            "cdr", [Expr::Cons(lst)] => Expr::Cons(lst.cdr()),
-            "list", [] rest @ .. => Expr::Cons(rest),
-            "count", [Expr::Cons(lst)] => Expr::Int(lst.into_iter().count().pipe(to_i64)?),
-            "empty?", [Expr::Cons(lst)] => Expr::Bool(lst.len_is(0)),
-            "apply", [func, Expr::Cons(args)], env:env, ctx:ctx => {
-                ctx.eval(Expr::Cons(cons(func,args)), Some(env))?
+            "rev", [Expr::List(it)] => Expr::List(it.reversed()),
+            "cons", [el, Expr::List(lst)] => Expr::List(cons(el, lst)),
+            "car", [Expr::List(lst)] => lst.car().unwrap_or(Expr::Nil),
+            "cdr", [Expr::List(lst)] => Expr::List(lst.cdr()),
+            "list", [] rest @ .. => Expr::List(rest),
+            "count", [Expr::List(lst)] => Expr::Int(lst.into_iter().count().pipe(to_i64)?),
+            "empty?", [Expr::List(lst)] => Expr::Bool(lst.len_is(0)),
+            "apply", [func, Expr::List(args)], env:env, ctx:ctx => {
+                ctx.eval(Expr::List(cons(func,args)), Some(env))?
             },
-            "nth", [Expr::Int(i), Expr::Cons(c)] => {
+            "nth", [Expr::Int(i), Expr::List(c)] => {
                 c.into_iter()
                  .nth(i.pipe(to_usize)?)
                  .ok_or(QxErr::NoArgs(None, ""))?
@@ -282,7 +301,7 @@ fn builtins(ident: &str) -> Option<Expr> {
             "swap!", [Expr::Atom(atom), cl @ Expr::Closure(_)] args @ ..,
                 env:env, ctx:ctx => {
                     let res = ctx.eval(
-                        Expr::Cons(
+                        Expr::List(
                             cons(cl, cons(atom.take(), args))
                         ),
                         Some(env)
@@ -303,7 +322,7 @@ fn builtins(ident: &str) -> Option<Expr> {
             ),
 
             // move to the global env
-            "export!", [Expr::Cons(l)], env:env, ctx:ctx => {
+            "export!", [Expr::List(l)], env:env, ctx:ctx => {
                 if Rc::ptr_eq(&env.inner(), &ctx.env.inner()) {
                     Err(anyhow!("ExportError: Nowhere to Export"))?;
                 }
@@ -326,7 +345,7 @@ fn builtins(ident: &str) -> Option<Expr> {
             // get all defined symbols
             "reflect:defsym", [], env:env => {
                 let y = env.data().borrow();
-                y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::Cons)
+                y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::List)
             },
         }
     }
@@ -336,7 +355,7 @@ fn str_builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident {
             "str:len", [Expr::String(s)] => Expr::Int(s.len().try_into().unwrap_or(0)),
-            "str:split", [Expr::String(s), Expr::String(sep)] => Expr::Cons(
+            "str:split", [Expr::String(s), Expr::String(sep)] => Expr::List(
                 s.split(&*sep)
                  .map(|it| Expr::String(it.into()))
                  .collect::<Cons>()
@@ -354,6 +373,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
 
             to_int(arg)
         }),
+        "int?" => func! {"int?"; [it] => Expr::Bool(matches!(it, Expr::Int(_))) },
         "str" => func! {"str";
             [] any @ .. =>
                 Expr::String(
@@ -366,6 +386,9 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                         .into_boxed_str().into()
                 )
         },
+        "str?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::String(_))) },
+        "sym?" => func! {"sym?"; [it] => Expr::Bool(matches!(it, Expr::Sym(_))) },
+        "list?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::List(_))) },
         "bool" => Func::new_expr("bool", |args, _, _| {
             let Some(arg) = args.car() else {
                 return Err(QxErr::NoArgs(None, "bool"));

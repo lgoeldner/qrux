@@ -166,5 +166,5 @@ fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
     }
 
     // Ok(Expr::List(list.into()))
-    Ok(Expr::Cons(list.into()))
+    Ok(Expr::List(list.into()))
 }

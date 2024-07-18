@@ -69,9 +69,9 @@ impl Runtime {
             let ast = self.macroexpand(in_ast, &env)?;
             // by default, break the result out of the loop
             break match ast {
-                Expr::Cons(Cons(None)) => Ok(ast),
+                Expr::List(Cons(None)) => Ok(ast),
 
-                Expr::Cons(ref list @ Cons(Some(_))) => {
+                Expr::List(ref list @ Cons(Some(_))) => {
                     let ident = &list.car().unwrap();
 
                     match self.apply(ident, list.clone(), env.clone()) {
@@ -101,7 +101,7 @@ impl Runtime {
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let Expr::Sym(ref ident) = ident else {
-            return self.apply_func(Expr::Cons(lst), env);
+            return self.apply_func(Expr::List(lst), env);
         };
 
         let xs = lst.cdr();
@@ -117,39 +117,45 @@ impl Runtime {
             "del!" => special_form! {
                 args, "(del! <sym>)";
                 [Expr::Sym(s)] => {
-                    env.as_ref().unwrap_or(&self.env).remove(&s);
-                    break_ok!(Expr::Nil)
+                    let r = env
+                        .as_ref()
+                        .unwrap_or(&self.env)
+                        .remove(&s)
+                        .map_or(Expr::Nil, id);
+                    break_ok!(r)
                 }
             },
 
             "defmacro!" => special_form! {
                 args, "(defmacro! <name> <args> <body>)";
-                [Expr::Sym(ident), Expr::Cons(cl_args), body] => {
+                [Expr::Sym(ident), Expr::List(cl_args), body] => {
                     let ControlFlow::Break(Ok(cl @ Expr::Closure(_)))
                             = self.create_closure(&env, cl_args, &body, true)
                     else {
                         unreachable!();
                     };
 
-                    self.env.set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
+                    env.unwrap_or_else(|| self.env.clone()).set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
+
+                    // self.env.set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
                 }
             },
 
             "mexp" => special_form! {
                 args, "(mexp <macro> <&args>)";
-                [] ..it => ControlFlow::Break(self.macroexpand(Expr::Cons(it), &env))
+                [] ..it => ControlFlow::Break(self.macroexpand(Expr::List(it), &env))
             },
 
             "try*" => special_form! {
                 args, "(try* <expr> (catch* <sym> <expr>)";
-                [try_expr, Expr::Cons(catch)] => {
+                [try_expr, Expr::List(catch)] => {
                     self.eval_trycatch(&try_expr, &env, catch)
                 }
             },
 
             "fn*" => special_form! {
                 args, "(fn* (<args>*) <body>)";
-                [Expr::Cons(args), body] => self.create_closure(&env, args, &body, false)
+                [Expr::List(args), body] => self.create_closure(&env, args, &body, false)
             },
 
             "if" => special_form! {
@@ -159,7 +165,7 @@ impl Runtime {
 
             "let*" => special_form! {
                 args, "(let* (<sym> <expr>)+ <expr>)";
-                [Expr::Cons(bindings), to_eval] => {
+                [Expr::List(bindings), to_eval] => {
                     self.eval_let(&env, bindings, &to_eval)
                 }
             },
@@ -205,7 +211,7 @@ impl Runtime {
                 })
             }
 
-            _ => self.apply_func(Expr::Cons(lst), env),
+            _ => self.apply_func(Expr::List(lst), env),
         }
     }
 
@@ -338,7 +344,7 @@ impl Runtime {
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         let new = match self.replace_eval(ast, env.clone()) {
-            Ok(Expr::Cons(new)) => new,
+            Ok(Expr::List(new)) => new,
             Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
             Err(e) => return err!(break e),
         };
@@ -399,7 +405,7 @@ impl Runtime {
                 .or_else(|| is_special_form(&sym).then_some(expr!(sym sym.clone())))
                 .ok_or_else(|| QxErr::NoDefErr(sym))?,
 
-            Expr::Cons(l) => Expr::Cons({
+            Expr::List(l) => Expr::List({
                 l.into_iter()
                     .map(|it| self.eval(it, env.clone()))
                     .collect::<Result<_, _>>()?
@@ -411,7 +417,7 @@ impl Runtime {
     /// Returns the macro and args to it
     /// if the AST is a list, whose first element is a macro
     fn is_macro_call(&mut self, ast: &Expr, env: &Option<Env>) -> Option<(Rc<Closure>, Cons)> {
-        if let Expr::Cons(lst) = ast {
+        if let Expr::List(lst) = ast {
             if let Some(Expr::Sym(sym)) = lst.car() {
                 match env.as_ref().unwrap_or(&self.env).get(&sym) {
                     Some(Expr::Closure(cl)) => cl.is_macro.then_some((cl, lst.cdr())),
@@ -461,27 +467,27 @@ fn qq_list(elts: Cons) -> Result<Expr, QxErr> {
     let elts = elts.into_iter().collect::<Vec<_>>();
     for elt in elts.into_iter().rev() {
         match elt {
-            Expr::Cons(ref v) if v.len_is(2) => {
+            Expr::List(ref v) if v.len_is(2) => {
                 if matches!(v.car(), Some(Expr::Sym(ref s)) if &** s == "splice-unquote") {
                     acc = vec![
                         expr!(concat),
                         v.nth(1).ok_or(QxErr::NoArgs(None, "splice-unqote"))?,
-                        Expr::Cons(acc.into()),
+                        Expr::List(acc.into()),
                     ];
                     continue;
                 }
             }
             _ => {}
         }
-        acc = vec![expr!(sym "cons"), quasiquote(&elt)?, Expr::Cons(acc.into())];
+        acc = vec![expr!(sym "cons"), quasiquote(&elt)?, Expr::List(acc.into())];
     }
 
-    Ok(Expr::Cons(acc.into()))
+    Ok(Expr::List(acc.into()))
 }
 
 fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
     match ast {
-        Expr::Cons(v) => {
+        Expr::List(v) => {
             if v.clone().len_is(2) {
                 if let Expr::Sym(ref s) = v.car().unwrap() {
                     if &**s == "unquote" {
@@ -494,4 +500,8 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
         }
         _ => Ok(ast.clone()),
     }
+}
+
+const fn id<T>(t: T) -> T {
+    t
 }

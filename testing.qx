@@ -1,4 +1,9 @@
 (val! a 10)
 
+(prn "bef")
 
-(println (str "helllo" a))
+(defmacro! not (_) true)
+
+(prn "after")
+
+(export! '(a not))

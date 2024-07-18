@@ -21,7 +21,7 @@ pub enum Expr {
     String(Rc<str>),
     Sym(Rc<str>),
     Bool(bool),
-    Cons(Cons),
+    List(Cons),
     #[default]
     Nil,
 }
@@ -35,7 +35,7 @@ pub enum ExprType {
     String,
     Sym,
     Bool,
-    Cons,
+    List,
     #[default]
     Nil,
 }
@@ -88,10 +88,10 @@ pub enum QxErr {
         err: anyhow::Error,
     },
 
-    #[error("ShadowErr: tried to shadow {0}, use Atom instead!")]
+    #[error("ShadowErr: tried to shadow `{0}`, use Atom instead!")]
     ShadowErr(String),
 
-    #[error("NoDefErr: {0} is not defined!")]
+    #[error("NoDefErr: `{0}` is not defined!")]
     NoDefErr(Rc<str>),
 }
 
@@ -293,7 +293,7 @@ impl Expr {
     pub fn contains_sym(&self, sym: &str) -> bool {
         match self {
             Self::Sym(s) => &**s == sym,
-            Self::Cons(l) => l.iter().any(|ex| ex.contains_sym(sym)),
+            Self::List(l) => l.iter().any(|ex| ex.contains_sym(sym)),
             _ => false,
         }
     }
@@ -306,7 +306,7 @@ impl Expr {
             Self::Sym(_) => ExprType::Sym,
             // Self::List(_) => ExprType::List,
             Self::Bool(_) => ExprType::Bool,
-            Self::Cons(_) => ExprType::Cons,
+            Self::List(_) => ExprType::List,
             Self::Nil => ExprType::Nil,
             Self::Atom(_) => ExprType::Atom,
             Self::Closure(_) => ExprType::Closure,
@@ -335,7 +335,7 @@ impl std::fmt::Debug for Expr {
         write!(f, "{self}")
     }
 }
-    
+
 pub struct Input(pub Rc<str>);
 
 impl Input {

@@ -81,7 +81,7 @@ impl Runtime {
             .env
             .set(
                 "*ARGS*".into(),
-                Expr::Cons(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
+                Expr::List(std::env::args().skip(1).map(|it| expr!(str it)).collect()),
                 eval::Shadow::No,
             )
             .pipe(drop);

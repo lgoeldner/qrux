@@ -1,49 +1,38 @@
-
-(val! -> range)
-(val! <- (swap ->))
-
 (defun! append (el to)
 	(concat to (list el)))
 
-(defun! dbg (it)
-	(do
-		(prn it)
-		it))
-
-(defun! dbgl (label it)
-	(do
-		(prn (str label ": " it))
-		it))
-
 ;;; partially applies some arguments to a function
-(defun! part (fun &args)
-	(fn* (&rest) `(apply ,fun ~args ~rest)))
+(defmacro! part (fun &args)
+	`(fn* (it) (,fun ~args)))
 
-(defmacro! apply (&args)
-	(let* (last ((count args) \- 1))
-		(do
-			`(,(car args) ; first function
-				~(slice 1 last args) ; rest of the arguments
-				~(nth last args))))) ; arguments provided in a list
+(val! ret 0)
 
-(defun! __do-filter (pred list acc)
-			(if (nil? list)
-				acc
-				(__do-filter 
-					pred 
-					(cdr list)
-					(if (pred (car list))
-						(cons (car list) acc)
-						acc))))
+;; (defmacro! apply (&args)
+;; 	(let* (last ((count args) \- 1))
+;; 		(do
+;; 			`(,(car args) ; first function
+;; 				~(slice 1 last args) ; rest of the arguments
+;; 				~(nth last args))))) ; arguments provided in a list
 
-(defun! filter (pred list)
-		(__do-filter pred list '()))
+;; (defun! __do-filter (pred list acc)
+;; 			(if (nil? list)
+;; 				acc
+;; 				(__do-filter 
+;; 					pred 
+;; 					(cdr list)
+;; 					(if (pred (car list))
+;; 						(cons (car list) acc)
+;; 						acc))))
 
-(defun! testpred (it)
-	(> 5 (dbg it)))
+;; (defun! filter (pred list)
+;; 		(__do-filter pred list '()))
 
-(defun! count_atoms (sym in)
-	(filter (part = sym)
-		 (filter 
-		 sym?
-		 (dbg in))))
+;; (defun! count_atoms (sym in)
+;; 	(filter (part = sym)
+;; 		 (filter 
+;; 		 sym?
+;; 		 (dbg in))))
+
+(export! '(ret part append))
+
+0

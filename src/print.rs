@@ -69,7 +69,7 @@ impl std::fmt::Display for Expr {
                 Self::Nil => "nil".fmt(f),
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
-                Self::Cons(it) => {
+                Self::List(it) => {
                     write!(f, "(")?;
                     it.0.as_ref()
                         .map(|it| write_cons_inner(f, &it))
@@ -88,7 +88,7 @@ impl std::fmt::Display for Expr {
                 Self::Func(_) => "<Func>".red().fmt(f),
                 Self::Closure(c) => c.to_string().red().fmt(f),
                 Self::Bool(b) => b.to_string().bright_blue().fmt(f),
-                Self::Cons(it) => it.fmt(f),
+                Self::List(it) => it.fmt(f),
             }
         }
     }
