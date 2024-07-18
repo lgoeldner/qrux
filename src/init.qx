@@ -1,9 +1,7 @@
 (do
 
-(val! t true)
-
-(defmacro! export-all! () 
-	(export! (reflect:defsym)))
+(defmacro! export-all! ()
+	`(export! (reflect:defsym)))
 
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
@@ -146,10 +144,16 @@
 	   `(map (fn* (,ident) ,body) ,lst)))
 
 
-;; load the provided file
-(if (= 1 (count *ARGS*))
+(list:iter file in *ARGS* 
 	(do
 		(println (str "loading file: " (car *ARGS*)))
-		(loadf-exported (car *ARGS*))))
+		(try* (loadf-exported (car *ARGS*))
+			(catch* ex (println (str "could not load "file": " ex))))))
+
+;; load the provided file
+;; (if (= 1 (count *ARGS*))
+;; 	(do
+;; 		(println (str "loading file: " (car *ARGS*)))
+;; 		(loadf-exported (car *ARGS*))))
 
 )

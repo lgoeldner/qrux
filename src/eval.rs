@@ -249,7 +249,7 @@ impl Runtime {
                     },
                     Shadow::No,
                 )
-                .pipe(ControlFlow::Break)?;
+                .unwrap();
 
             // evaluate the catch expression
             ControlFlow::Continue(EvalTco {
