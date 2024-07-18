@@ -140,15 +140,12 @@
 		(assert (= in 'in))
 	   `(map (fn* (,ident) (do ~body)) ,lst)))
 
-(list:iter file in *ARGS* 
+(defmacro! set! (ident val)
+	`(do (del! ,ident) (val! ,ident ,val)))
+
+(list:iter file in *ARGS*
 		(println (str "loading file: " (car *ARGS*)))
 		(try* (loadf (car *ARGS*))
-			(catch* ex (println (str "could not load "file": " ex)))))
-
-;; load the provided file
-;; (if (= 1 (count *ARGS*))
-;; 	(do
-;; 		(println (str "loading file: " (car *ARGS*)))
-;; 		(loadf-exported (car *ARGS*))))
+			(catch* ex (println (str "failed to load `"file"`: " ex)))))
 
 )

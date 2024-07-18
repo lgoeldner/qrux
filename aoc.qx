@@ -1,3 +1,5 @@
+(prn "1")
+
 (val! start (time))
 
 (defun! max (a b)
@@ -25,23 +27,23 @@
 			(cond
 				((> m @r1) (do (reset! r3 @r2) (reset! r2 @r1) (reset! r1 m)))
 				((> m @r2) (do (reset! r3 @r2) (reset! r2 m)))
-				((> m @r3) (do (reset! r3 m))))
+				((> m @r3) (reset! r3 m)))
 
 			(_do_max3 (cdr lst) r1 r2 r3))))
 
 (val! inp (slurp "inp.txt"))
 
 (val! chunks
-	(str:split inp "\n\n"))
+	(str:splitby inp "\n\n"))
 
 (val! sums
-	(map 
+	(map
 		(fn* (it)
 			(apply
 				'+
 				(map
 					int
-					(str:split it "\n")
+					(str:splitby it "\n")
 					)))
 		chunks))
 

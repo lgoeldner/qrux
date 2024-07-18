@@ -239,32 +239,34 @@ impl Runtime {
         // evaluate the expression
         let res = self.eval(try_expr.clone(), env.clone());
 
-        // if its an error, evaluate the catch expression
-        if let Err(e) = res {
-            // get the symbol to bind the error to
+        match res {
+            Err(QxErr::Fatal(_) | QxErr::Stop) | Ok(_) => ControlFlow::Break(res),
 
-            // create the env with the error
-            let mut err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
+            // if its a recoverable error, evaluate the catch expression
+            Err(e) => {
+                // get the symbol to bind the error to
 
-            // bind the error
-            err_env
-                .set(
-                    catch_to_sym,
-                    match e {
-                        QxErr::LispErr(e) => e,
-                        _ => Expr::String(e.to_string().into()),
-                    },
-                    Shadow::No,
-                )
-                .unwrap();
+                // create the env with the error
+                let mut err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
-            // evaluate the catch expression
-            ControlFlow::Continue(EvalTco {
-                ast: catch_expr,
-                env: Some(err_env),
-            })
-        } else {
-            ControlFlow::Break(res)
+                // bind the error
+                err_env
+                    .set(
+                        catch_to_sym,
+                        match e {
+                            QxErr::LispErr(e) => e,
+                            _ => Expr::String(e.to_string().into()),
+                        },
+                        Shadow::No,
+                    )
+                    .unwrap();
+
+                // evaluate the catch expression
+                ControlFlow::Continue(EvalTco {
+                    ast: catch_expr,
+                    env: Some(err_env),
+                })
+            }
         }
     }
 
@@ -375,15 +377,10 @@ impl Runtime {
         let env = env.as_mut().unwrap_or(&mut self.env);
 
         // wether we should decrement the `env`s reference count
-        // in order to prevent a reference cycle,
-        // where the closure captures the environment it is stored in
-        let mut has_ref_cycle = false;
-
-        if let Expr::Closure(cl) = &res {
-            if Rc::ptr_eq(&cl.captured.inner(), &env.inner()) {
-                has_ref_cycle = true;
-            }
-        }
+        // in order to prevent a reference cycle from happening,
+        // if the closure captures the environment it is stored in
+        let has_ref_cycle =
+            matches!(&res, Expr::Closure(cl) if Rc::ptr_eq(&cl.captured.inner(), &env.inner()));
 
         env.set(ident.clone(), res, over)?;
 
@@ -456,14 +453,14 @@ fn is_special_form(sym: &str) -> bool {
             | "unquote"
             | "splice-unquote"
             | "defmacro!"
+            | "del!"
             | "try*"
             | "catch*"
     )
 }
 
-fn qq_list(elts: Cons) -> Result<Expr, QxErr> {
+fn qq_list(elts: &Cons) -> Result<Expr, QxErr> {
     // TODO: rewrite with linked lists
-
     let mut acc = vec![];
     let elts = elts.into_iter().collect::<Vec<_>>();
     for elt in elts.into_iter().rev() {
@@ -489,7 +486,7 @@ fn qq_list(elts: Cons) -> Result<Expr, QxErr> {
 fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
     match ast {
         Expr::List(v) => {
-            if v.clone().len_is(2) {
+            if v.len_is(2) {
                 if let Expr::Sym(ref s) = v.car().unwrap() {
                     if &**s == "unquote" {
                         return Ok(v.cdar().unwrap());
@@ -497,7 +494,7 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
                 }
             }
 
-            qq_list(v.clone())
+            qq_list(v)
         }
         _ => Ok(ast.clone()),
     }
