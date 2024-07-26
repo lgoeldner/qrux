@@ -8,6 +8,7 @@
 
 use std::{collections::HashSet, path::PathBuf, vec};
 
+use ecow::EcoString;
 use reedline::{
     Completer, DefaultCompleter, DefaultHinter, DefaultPrompt, DefaultPromptSegment,
     ExampleHighlighter, FileBackedHistory, Reedline,
@@ -17,6 +18,7 @@ use nu_ansi_term::{Color, Style};
 
 use env::{Env, Inner};
 use read::{Cons, Expr, PResult};
+use slab::Slab;
 use tap::{Pipe, Tap};
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;

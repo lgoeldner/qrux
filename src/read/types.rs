@@ -1,15 +1,16 @@
-use std::{any, cell::RefCell, rc::Rc};
+use std::{any, cell::RefCell, marker::PhantomData, rc::Rc};
 
 use ecow::EcoString;
 use thiserror::Error;
 
-use crate::Func;
+use crate::{Func, Runtime};
 
 pub type PResult<T> = Result<T, QxErr>;
 
 pub mod closure;
 pub mod typing;
 pub use closure::Closure;
+pub mod kw;
 
 /// cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
@@ -22,6 +23,7 @@ pub enum Expr {
     Sym(EcoString),
     Bool(bool),
     List(Cons),
+    Keyword(kw::Keyword),
     #[default]
     Nil,
 }
@@ -36,6 +38,7 @@ pub enum ExprType {
     Sym,
     Bool,
     List,
+    Keyword,
     #[default]
     Nil,
 }
@@ -311,6 +314,7 @@ impl Expr {
             Self::Atom(_) => ExprType::Atom,
             Self::Closure(_) => ExprType::Closure,
             Self::Func(_) => ExprType::Func,
+            Self::Keyword(_) => ExprType::Keyword,
         }
     }
 }

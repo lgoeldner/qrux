@@ -76,6 +76,7 @@ impl std::fmt::Display for Expr {
                         .transpose()?;
                     write!(f, ")")
                 }
+                Self::Keyword(kw) => write!(f, "{kw}"),
             }
         } else {
             match self {
@@ -89,6 +90,7 @@ impl std::fmt::Display for Expr {
                 Self::Closure(c) => c.to_string().red().fmt(f),
                 Self::Bool(b) => b.to_string().bright_blue().fmt(f),
                 Self::List(it) => it.fmt(f),
+                Self::Keyword(kw) => kw.to_string().green().fmt(f),
             }
         }
     }

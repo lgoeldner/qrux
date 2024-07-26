@@ -5,22 +5,26 @@ use nu_ansi_term::{Color, Style};
 use reedline::Highlighter;
 use reedline::StyledText;
 
-/// A simple, example highlighter that shows how to highlight keywords
 pub struct Lisp {
-    keywords: HashSet<&'static str>,
+    funcs: HashSet<&'static str>,
 }
 
 impl Highlighter for Lisp {
     fn highlight(&self, line: &str, _cursor: usize) -> StyledText {
-        let kw_color = Color::LightRed;
+        let func_color = Color::LightRed;
         let fn_color = Color::LightMagenta;
         let neutral_color = Color::Purple;
         let num_color = Color::Cyan;
         let str_color = Color::LightGreen;
         let bool_color = Color::Blue;
         let nil_color = Color::LightBlue;
-        let paren_colors = [Color::Rgb(255, 198, 124), Color::Rgb(228, 124, 255), Color::LightBlue];
+        let paren_colors = [
+            Color::Rgb(255, 198, 124),
+            Color::Rgb(228, 124, 255),
+            Color::LightBlue,
+        ];
         let comment_color = Color::DarkGray;
+        let kw_color = Color::Rgb(138, 206, 0);
 
         let mut styled_text = StyledText::new();
         let mut tokens = read::tokenize_with_whitespace(line);
@@ -77,6 +81,10 @@ impl Highlighter for Lisp {
                     token.to_string(),
                 )),
 
+                kw if kw.starts_with(':') => {
+                    styled_text.push((Style::from(kw_color), token.to_string()));
+                }
+
                 string if string.starts_with('"') => {
                     styled_text.push((Style::from(str_color), token.to_string()));
                 }
@@ -91,8 +99,8 @@ impl Highlighter for Lisp {
 
                 "nil" => styled_text.push((Style::from(nil_color).bold(), token.to_string())),
 
-                kw if self.keywords.contains(kw) => {
-                    styled_text.push((Style::from(kw_color).bold(), token.to_string()));
+                kw if self.funcs.contains(kw) => {
+                    styled_text.push((Style::from(func_color).bold(), token.to_string()));
                 }
 
                 comment if comment.starts_with(';') => {
@@ -122,7 +130,7 @@ impl Lisp {
     /// Construct the default highlighter with a given set of extern commands/keywords to detect and highlight
     pub fn new(external_commands: Vec<&'static str>) -> Self {
         Self {
-            keywords: HashSet::from_iter(external_commands),
+            funcs: HashSet::from_iter(external_commands),
         }
     }
 }

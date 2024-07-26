@@ -1,19 +1,14 @@
-use std::rc::Rc;
-
-use ecow::EcoString;
+use ecow::{EcoString, EcoVec};
 
 use crate::env::Env;
 
 use super::{Cons, Expr, QxErr};
 
-enum Args {
-    NoVarargs(Box<[EcoString]>),
-    Varargs {
-        /// the amount of args before the varargs
-        before_c: usize,
-        after_c: usize,
-        args: Box<[EcoString]>,
-    },
+/// TODO: Add Keyword Arguments, Finish this
+
+struct Args {
+    req: EcoVec<EcoString>,
+    opt: EcoVec<(EcoString, Expr)>,
 }
 
 #[derive(Debug)]
@@ -46,8 +41,8 @@ impl Closure {
             .find_map(|it| (&**it.1 == "&rest").then_some(it.0))
             .map_or_else(
                 || {
-                    let args_name = args_name.clone().into_boxed_slice();
-                    Args::NoVarargs(args_name)
+                    let _args_name = args_name.clone().into_boxed_slice();
+                    0
                 },
                 |varargs_idx| {
                     println!(
@@ -56,8 +51,7 @@ impl Closure {
                         varargs_idx,
                         args_name.len() - (varargs_idx + 1)
                     );
-
-                    todo!()
+                    0
                 },
             );
 

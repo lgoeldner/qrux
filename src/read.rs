@@ -1,4 +1,5 @@
 use ecow::EcoString;
+use kw::Keyword;
 use tap::Pipe;
 pub use types::*;
 
@@ -16,10 +17,8 @@ pub mod expr_macro;
 pub mod types;
 
 static RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(
-        r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|,|[^\s\[\]{}('"`,;)]*)"#,
-    )
-    .unwrap()
+    Regex::new(r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|,|[^\s\[\]{}('"`,;)]*)"#)
+        .unwrap()
 });
 
 /// Split input into tokens
@@ -39,9 +38,7 @@ pub fn tokenize(input: &str) -> TokenStream {
 }
 
 pub fn tokenize_with_whitespace(input: &str) -> TokenStream {
-    RE.find_iter(input)
-        .map(|it| it.as_str())
-        .collect()
+    RE.find_iter(input).map(|it| it.as_str()).collect()
 }
 
 fn get_inp(ctx: &mut Term) -> PResult<String> {
@@ -72,9 +69,7 @@ impl core::str::FromStr for Expr {
     type Err = QxErr;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Input(s.into())
-            .tokenize()
-            .try_into()
+        Input(s.into()).tokenize().try_into()
     }
 }
 
@@ -131,6 +126,8 @@ fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
                     .into(),
             )
         }
+
+        kw if kw.starts_with(':') => expr!(kw kw),
         sym => expr!(sym sym),
     })
 }

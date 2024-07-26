@@ -36,6 +36,10 @@ macro_rules! expr {
         $crate::Expr::Atom(::std::rc::Rc::new(::std::cell::RefCell::new($it)))
     };
 
+	(kw $it:expr)  => {
+		$crate::Expr::Keyword($crate::read::types::kw::Keyword::new($it.into()))
+	};
+
 	($it:ident) => {
         $crate::Expr::Sym(stringify!($it).into())
     };
