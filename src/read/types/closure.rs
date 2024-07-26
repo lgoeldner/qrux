@@ -6,12 +6,28 @@ use crate::env::Env;
 
 use super::{Cons, Expr, QxErr};
 
-#[derive(Clone, Debug)]
+enum Args {
+    NoVarargs(Box<[EcoString]>),
+    Varargs {
+        /// the amount of args before the varargs
+        before_c: usize,
+        after_c: usize,
+        args: Box<[EcoString]>,
+    },
+}
+
+#[derive(Debug)]
 pub struct Closure {
     pub args_name: Box<[EcoString]>,
     pub body: Expr,
     pub captured: Env,
     pub is_macro: bool,
+}
+
+impl Clone for Closure {
+    fn clone(&self) -> Self {
+        unreachable!("Closures Should always live in an `Rc<_>`")
+    }
 }
 
 impl Eq for Closure {}
@@ -24,8 +40,30 @@ impl PartialEq for Closure {
 impl Closure {
     #[must_use]
     pub fn new(args_name: Vec<EcoString>, body: Expr, captured: Env, is_macro: bool) -> Self {
+        let _hallo = args_name
+            .iter()
+            .enumerate()
+            .find_map(|it| (&**it.1 == "&rest").then_some(it.0))
+            .map_or_else(
+                || {
+                    let args_name = args_name.clone().into_boxed_slice();
+                    Args::NoVarargs(args_name)
+                },
+                |varargs_idx| {
+                    println!(
+                        "{} - &{} - {}",
+                        varargs_idx,
+                        varargs_idx,
+                        args_name.len() - (varargs_idx + 1)
+                    );
+
+                    todo!()
+                },
+            );
+
+        let args_name = args_name.into_boxed_slice();
         Self {
-            args_name: args_name.into(),
+            args_name,
             body,
             captured,
             is_macro,
