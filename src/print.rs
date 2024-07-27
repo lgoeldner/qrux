@@ -27,33 +27,59 @@ impl std::fmt::Debug for Cons {
     }
 }
 
+// fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result {
+//     match &**list {
+//         ConsCell {
+//             ref car,
+//             cdr: Cons(None),
+//         } => {
+//             if f.alternate() {
+//                 write!(f, "{car:#}")
+//             } else {
+//                 write!(f, "{car}")
+//             }
+//         }
+
+//         ConsCell {
+//             car,
+//             cdr: Cons(Some(ref cdr)),
+//         } => {
+//             if f.alternate() {
+//                 write!(f, "{car:#}")?;
+//             } else {
+//                 write!(f, "{car}")?;
+//             }
+
+//             write!(f, " ")?;
+
+//             write_cons_inner(f, cdr)
+//         }
+//     }
+// }
+
 fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result {
-    match &**list {
-        ConsCell {
-            ref car,
-            cdr: Cons(None),
-        } => {
-            if f.alternate() {
-                write!(f, "{car:#}")
-            } else {
-                write!(f, "{car}")
-            }
+    let mut current = list;
+
+    while let ConsCell {
+        ref car,
+        cdr: Cons(Some(ref cdr)),
+    } = **current
+    {
+        if f.alternate() {
+            write!(f, "{car:#}")?;
+        } else {
+            write!(f, "{car}")?;
         }
 
-        ConsCell {
-            car,
-            cdr: Cons(Some(ref cdr)),
-        } => {
-            if f.alternate() {
-                write!(f, "{car:#}")?;
-            } else {
-                write!(f, "{car}")?;
-            }
+        write!(f, " ")?;
 
-            write!(f, " ")?;
+        current = cdr;
+    }
 
-            write_cons_inner(f, cdr)
-        }
+    if f.alternate() {
+        write!(f, "{:#}", current.car)
+    } else {
+        write!(f, "{}", current.car)
     }
 }
 
@@ -72,7 +98,7 @@ impl std::fmt::Display for Expr {
                 Self::List(it) => {
                     write!(f, "(")?;
                     it.0.as_ref()
-                        .map(|it| write_cons_inner(f, &it))
+                        .map(|it| write_cons_inner(f, it))
                         .transpose()?;
                     write!(f, ")")
                 }

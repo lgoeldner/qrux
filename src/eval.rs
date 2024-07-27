@@ -1,7 +1,7 @@
 use crate::{
     env::Env,
     expr, func,
-    read::{types::closure::Closure, Cons, Expr, ExprType, QxErr},
+    read::{cons, types::closure::Closure, Cons, Expr, ExprType, QxErr},
     special_form, Func, Runtime,
 };
 use anyhow::{anyhow, Context};
@@ -461,26 +461,35 @@ fn is_special_form(sym: &str) -> bool {
 
 fn qq_list(elts: &Cons) -> Result<Expr, QxErr> {
     // TODO: rewrite with linked lists
-    let mut acc = vec![];
+    let mut acc = Cons::nil();
+    let mut acc2 = Cons::nil();
+
     let elts = elts.into_iter().collect::<Vec<_>>();
     for elt in elts.into_iter().rev() {
         match elt {
             Expr::List(ref v) if v.len_is(2) => {
                 if matches!(v.car(), Some(Expr::Sym(ref s)) if &** s == "splice-unquote") {
-                    acc = vec![
+                    acc = Cons::from(&[
                         expr!(concat),
                         v.nth(1).ok_or(QxErr::NoArgs(None, "splice-unqote"))?,
-                        Expr::List(acc.into()),
-                    ];
+                        Expr::List(acc),
+                    ]);
+
+                    acc2 = Cons::concat(v.cdr(), acc2);
+
                     continue;
                 }
             }
             _ => {}
         }
-        acc = vec![expr!(sym "cons"), quasiquote(&elt)?, Expr::List(acc.into())];
+
+        acc2 = cons(quasiquote(&elt)?, acc2);
+
+        acc = Cons::from(&[expr!(sym "cons"), quasiquote(&elt)?, Expr::List(acc)]);
     }
 
-    Ok(Expr::List(acc.into()))
+    dbg!(acc2);
+    Ok(Expr::List(acc))
 }
 
 fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {

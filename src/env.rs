@@ -10,12 +10,6 @@ use ecow::EcoString;
 pub use ll_core::{core_func_names, core_map};
 use tap::Pipe;
 
-// mod core;
-// pub use core::core_map;
-// fn core_map(_: &str) -> Option<Expr> {
-//     None
-// }
-
 #[derive(Clone, Default)]
 pub struct Inner {
     pub(crate) outer: Option<Env>,
@@ -77,11 +71,11 @@ impl Env {
         )
     }
 
-    /// set to the environment, returns either Expr::Nil or a ShadowError
-    pub fn set(&mut self, ident: EcoString, val: Expr, over: Shadow) -> Result<Expr, QxErr> {
+    /// set to the environment, returns either `Expr::Nil` or a `ShadowError`
+    pub fn set(&self, ident: EcoString, val: Expr, over: Shadow) -> Result<Expr, QxErr> {
         if &*ident != "_" {
             if matches!(over, Shadow::No) && self.0.data.borrow_mut().contains_key(&ident) {
-				eprintln!("{ident} already set");
+                eprintln!("{ident} already set");
                 return Err(QxErr::ShadowErr(ident));
             }
 
