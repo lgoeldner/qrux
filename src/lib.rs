@@ -156,7 +156,7 @@ impl Term {
 
 pub mod env;
 pub mod eval;
+mod highlighter;
 pub mod lazy;
 pub mod print;
 pub mod read;
-mod highlighter;

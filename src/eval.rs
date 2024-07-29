@@ -181,10 +181,15 @@ impl Runtime {
                 [expr] => ControlFlow::Break(quasiquote(&expr))
             },
 
+            "nqqex" => special_form! {
+                args, "(nqqex <expr>)";
+                [expr] => ControlFlow::Break(new_quasiquote(expr))
+            },
+
             "quasiquote" => special_form! {
                 args, "(quasiquote <expr>)";
                 [expr] => ControlFlow::Continue(EvalTco {
-                    ast: early_ret!(quasiquote(&expr)),
+                    ast: early_ret!(new_quasiquote(expr)),
                     env
                 })
             },
@@ -462,7 +467,6 @@ fn is_special_form(sym: &str) -> bool {
 fn qq_list(elts: &Cons) -> Result<Expr, QxErr> {
     // TODO: rewrite with linked lists
     let mut acc = Cons::nil();
-    let mut acc2 = Cons::nil();
 
     let elts = elts.into_iter().collect::<Vec<_>>();
     for elt in elts.into_iter().rev() {
@@ -475,20 +479,15 @@ fn qq_list(elts: &Cons) -> Result<Expr, QxErr> {
                         Expr::List(acc),
                     ]);
 
-                    acc2 = Cons::concat(v.cdr(), acc2);
-
                     continue;
                 }
             }
             _ => {}
         }
 
-        acc2 = cons(quasiquote(&elt)?, acc2);
-
         acc = Cons::from(&[expr!(sym "cons"), quasiquote(&elt)?, Expr::List(acc)]);
     }
 
-    dbg!(acc2);
     Ok(Expr::List(acc))
 }
 
@@ -506,6 +505,55 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
             qq_list(v)
         }
         _ => Ok(ast.clone()),
+    }
+}
+
+fn qq_list_new(ast: &Cons) -> Result<Cons, QxErr> {
+    let mut y = Vec::new();
+    for item in ast {
+        match item {
+            Expr::List(ref c) if c.len_is(2) => {
+                if let Expr::Sym(ref s) = c.car().unwrap() {
+                    if &**s == "splice-unquote" {
+                        eprintln!("{{c: {c:?}, curr: {y:?}}}");
+                        let Some(Expr::List(l)) = c.cdr().car() else {
+                            return Err(QxErr::NoArgs(c.clone().into(), "splice-unquote"));
+                        };
+                        
+                        y.extend(qq_list_new(&l)?.into_iter());
+                    }
+                }
+            }
+
+            _ => y.push(new_quasiquote(item)?),
+        }
+    }
+
+    ast.iter()
+        .map(new_quasiquote)
+        .collect::<Result<Cons, _>>()
+        .map(|it| cons(expr!(sym "list"), it))
+}
+
+fn new_quasiquote(ast: Expr) -> Result<Expr, QxErr> {
+    match ast {
+        Expr::List(ref c) => {
+            if c.len_is(2) {
+                if let Expr::Sym(ref s) = c.car().unwrap() {
+                    match &**s {
+                        "unquote" => {
+                            return Ok(c.cdr().car().unwrap());
+                        }
+                        "splice-unquote" => eprintln!("{c:?}"),
+                        _ => {}
+                    }
+                }
+            }
+
+            qq_list_new(c).map(Expr::List)
+        }
+
+        _ => Ok(Expr::List(Cons::from(&[expr!(sym "quote"), ast]))),
     }
 }
 

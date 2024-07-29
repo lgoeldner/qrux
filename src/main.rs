@@ -1,7 +1,6 @@
 use colored::Colorize;
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
-
 fn main() -> Result<(), ()> {
     let exception = "Exception".on_red();
     let mut runtime = match Runtime::new(Term::new()) {

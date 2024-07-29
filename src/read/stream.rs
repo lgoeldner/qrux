@@ -28,7 +28,7 @@ impl TokenStream<'_> {
     pub fn prev(&self) -> Option<&str> {
         self.tokens.get(self.pos.checked_sub(2)?).copied()
     }
-    
+
     pub fn is_eof(&self) -> bool {
         self.pos >= self.tokens.len()
     }
