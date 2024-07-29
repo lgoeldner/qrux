@@ -41,7 +41,7 @@ pub fn tokenize_with_whitespace(input: &str) -> TokenStream {
     RE.find_iter(input).map(|it| it.as_str()).collect()
 }
 
-fn get_inp(ctx: &mut Term) -> PResult<String> {
+fn get_inp(ctx: &mut Term) -> QxResult<String> {
     match ctx.reedline.read_line(&ctx.prompt) {
         Ok(Signal::Success(line)) => Ok(line),
         Ok(Signal::CtrlD | Signal::CtrlC) => Err(QxErr::Stop)?,
@@ -49,12 +49,12 @@ fn get_inp(ctx: &mut Term) -> PResult<String> {
     }
 }
 
-pub(crate) fn read_stdin(runtime: &mut Runtime) -> PResult<Expr> {
+pub(crate) fn read_stdin(runtime: &mut Runtime) -> QxResult<Expr> {
     Input::get(runtime.term())?.tokenize().try_into()
 }
 
 #[allow(dead_code)]
-pub(crate) fn from_string(s: EcoString) -> PResult<Expr> {
+pub(crate) fn from_string(s: EcoString) -> QxResult<Expr> {
     Input(s).tokenize().try_into()
 }
 

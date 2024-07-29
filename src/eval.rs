@@ -1,15 +1,17 @@
+use anyhow::anyhow;
+use ecow::EcoString;
+use special_form_code::SpecialForm;
+use std::{ops::ControlFlow, rc::Rc};
+use tap::prelude::*;
+
 use crate::{
     env::Env,
-    expr, func,
-    read::{cons, types::closure::Closure, Cons, Expr, ExprType, QxErr},
+    expr,
+    read::{closure, cons, types::closure::Closure, Cons, Expr, ExprType, QxErr},
     special_form, Func, Runtime,
 };
-use anyhow::{anyhow, Context};
-use ecow::EcoString;
-use std::{ops::ControlFlow, rc::Rc};
-use tap::{Pipe, Tap};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Shadow {
     Yes,
     No,
@@ -101,21 +103,28 @@ impl Runtime {
         lst: Cons,
         env: Option<Env>,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+        let xs = lst.cdr();
+        let args = xs.into_iter();
+
         let Expr::Sym(ref ident) = ident else {
             return self.apply_func(Expr::List(lst), env);
         };
 
-        let xs = lst.cdr();
-        let args = xs.into_iter();
+        let Ok(opcode) = ident.parse() else {
+            return self.apply_func(Expr::List(lst), env);
+        };
 
-        match ident as &str {
-            "val!" => special_form! {
+        match opcode {
+            SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
                 [Expr::Sym(ident), expr] => {
-                    ControlFlow::Break(self.defenv(&ident, &expr, env, Shadow::No))
+                    ControlFlow::Break(
+                        self.defenv(&ident, &expr, env, Shadow::No)
+                    )
                 }
             },
-            "del!" => special_form! {
+
+            SpecialForm::Del => special_form! {
                 args, "(del! <sym>)";
                 [Expr::Sym(s)] => {
                     let r = env
@@ -127,7 +136,7 @@ impl Runtime {
                 }
             },
 
-            "defmacro!" => special_form! {
+            SpecialForm::Defmacro => special_form! {
                 args, "(defmacro! <name> <args> <body>)";
                 [Expr::Sym(ident), Expr::List(cl_args), body] => {
                     let ControlFlow::Break(Ok(cl @ Expr::Closure(_)))
@@ -136,65 +145,58 @@ impl Runtime {
                         unreachable!();
                     };
 
-                    env.unwrap_or_else(|| self.env.clone()).set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
-
-                    // self.env.set(ident, cl, Shadow::No).pipe(ControlFlow::Break)
+                    env.unwrap_or_else(|| self.env.clone()).set(ident, cl, Shadow::Yes).pipe(ControlFlow::Break)
                 }
             },
 
-            "mexp" => special_form! {
+            SpecialForm::Mexp => special_form! {
                 args, "(mexp <macro> <&args>)";
                 [] ..it => ControlFlow::Break(self.macroexpand(Expr::List(it), &env))
             },
 
-            "try*" => special_form! {
+            SpecialForm::Try => special_form! {
                 args, "(try* <expr> (catch* <sym> <expr>)";
                 [try_expr, Expr::List(catch)] => {
                     self.eval_trycatch(&try_expr, &env, catch)
                 }
             },
 
-            "fn*" => special_form! {
+            SpecialForm::Fn => special_form! {
                 args, "(fn* (<args>*) <body>)";
                 [Expr::List(args), body] => self.create_closure(&env, args, &body, false)
             },
 
-            "if" => special_form! {
+            SpecialForm::If => special_form! {
                 args, "(if <condition> <then> <else>)";
                 [cond, then] ..xs => self.eval_if(xs, env, &cond, &then)
             },
 
-            "let*" => special_form! {
+            SpecialForm::Let => special_form! {
                 args, "(let* (<sym> <expr>)+ <expr>)";
                 [Expr::List(bindings), to_eval] => {
                     self.eval_let(&env, bindings, &to_eval)
                 }
             },
 
-            "quote" => special_form! {
+            SpecialForm::Quote => special_form! {
                 args, "(quote <expr>)";
                 [expr] => ControlFlow::Break(Ok(expr))
             },
 
-            "qqex" => special_form! {
+            SpecialForm::Qqex => special_form! {
                 args, "(qqex <expr>)";
                 [expr] => ControlFlow::Break(quasiquote(&expr))
             },
 
-            "nqqex" => special_form! {
-                args, "(nqqex <expr>)";
-                [expr] => ControlFlow::Break(new_quasiquote(expr))
-            },
-
-            "quasiquote" => special_form! {
+            SpecialForm::QuasiQuote => special_form! {
                 args, "(quasiquote <expr>)";
                 [expr] => ControlFlow::Continue(EvalTco {
-                    ast: early_ret!(new_quasiquote(expr)),
+                    ast: early_ret!(quasiquote(&expr)),
                     env
                 })
             },
 
-            "do" => {
+            SpecialForm::Do => {
                 let mut peekable = args.peekable();
 
                 if peekable.peek().is_none() {
@@ -216,8 +218,6 @@ impl Runtime {
                     env,
                 })
             }
-
-            _ => self.apply_func(Expr::List(lst), env),
         }
     }
 
@@ -331,6 +331,8 @@ impl Runtime {
         body: &Expr,
         is_macro: bool,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+		let _t_nargs = closure::args::Args::new(args.clone()).unwrap();
+
         let args = args
             .into_iter()
             .map(|it| match it {
@@ -504,11 +506,12 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
 
             qq_list(v)
         }
-        _ => Ok(ast.clone()),
+        _ => Ok(expr!(cons expr!(sym "quote"), ast.clone())),
     }
 }
 
-fn qq_list_new(ast: &Cons) -> Result<Cons, QxErr> {
+// BUG: splice-unquote is not working
+fn _qq_list_new(ast: &Cons) -> Result<Cons, QxErr> {
     let mut y = Vec::new();
     for item in ast {
         match item {
@@ -519,23 +522,23 @@ fn qq_list_new(ast: &Cons) -> Result<Cons, QxErr> {
                         let Some(Expr::List(l)) = c.cdr().car() else {
                             return Err(QxErr::NoArgs(c.clone().into(), "splice-unquote"));
                         };
-                        
-                        y.extend(qq_list_new(&l)?.into_iter());
+
+                        y.extend(_qq_list_new(&l)?.into_iter());
                     }
                 }
             }
 
-            _ => y.push(new_quasiquote(item)?),
+            _ => y.push(_new_quasiquote(item)?),
         }
     }
 
     ast.iter()
-        .map(new_quasiquote)
+        .map(_new_quasiquote)
         .collect::<Result<Cons, _>>()
         .map(|it| cons(expr!(sym "list"), it))
 }
 
-fn new_quasiquote(ast: Expr) -> Result<Expr, QxErr> {
+fn _new_quasiquote(ast: Expr) -> Result<Expr, QxErr> {
     match ast {
         Expr::List(ref c) => {
             if c.len_is(2) {
@@ -550,13 +553,55 @@ fn new_quasiquote(ast: Expr) -> Result<Expr, QxErr> {
                 }
             }
 
-            qq_list_new(c).map(Expr::List)
+            _qq_list_new(c).map(Expr::List)
         }
 
-        _ => Ok(Expr::List(Cons::from(&[expr!(sym "quote"), ast]))),
+        _ => Ok(expr!(cons expr!(sym "quote"), ast)),
     }
 }
 
 const fn id<T>(t: T) -> T {
     t
+}
+
+mod special_form_code {
+    use tap::Pipe;
+
+    pub enum SpecialForm {
+        Val,
+        Del,
+        Defmacro,
+        Mexp,
+        Try,
+        Fn,
+        If,
+        Let,
+        Quote,
+        Qqex,
+        QuasiQuote,
+        Do,
+    }
+
+    impl std::str::FromStr for SpecialForm {
+        type Err = ();
+
+        fn from_str(s: &str) -> Result<Self, Self::Err> {
+            match s {
+                "val!" => Self::Val,
+                "del!" => Self::Del,
+                "defmacro!" => Self::Defmacro,
+                "mexp" => Self::Mexp,
+                "try*" => Self::Try,
+                "fn*" => Self::Fn,
+                "if" => Self::If,
+                "let*" => Self::Let,
+                "quote" => Self::Quote,
+                "qqex" => Self::Qqex,
+                "quasiquote" => Self::QuasiQuote,
+                "do" => Self::Do,
+                _ => return Err(()),
+            }
+            .pipe(Ok)
+        }
+    }
 }

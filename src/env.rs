@@ -41,7 +41,7 @@ impl Inner {
         Self::new_env(Some(outer))
     }
 
-    pub fn outer(&self) -> Option<Rc<Self>> {
+    pub fn outer_env(&self) -> Option<Rc<Self>> {
         self.outer.as_ref().map(|it| &it.0).cloned()
     }
 }

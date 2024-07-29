@@ -3,6 +3,7 @@ use tap::Pipe;
 
 use crate::{
     eval::Shadow,
+    expr,
     lazy::Lazy,
     read::{
         self,
@@ -13,6 +14,8 @@ use crate::{
 };
 
 use std::{cell::RefCell, fmt::Write, num::TryFromIntError, rc::Rc, time::SystemTime};
+
+use super::Env;
 
 #[macro_export]
 macro_rules! func {
@@ -238,6 +241,24 @@ fn as_usize(i: i64) -> Result<usize, QxErr> {
     i.try_into().map_err(|_| QxErr::IntOverflowErr)
 }
 
+fn env_to_expr(env: &Env) -> Expr {
+    let y = env.inner().outer_env().map_or_else(Cons::nil, |outer| {
+        let outer_env_expr = env_to_expr(&Env(outer));
+        Cons::from(&[Cons::from(&[expr!(kw ":outer"), outer_env_expr]).pipe(Expr::List)])
+    });
+
+    env.data()
+        .borrow()
+        .iter()
+        .map(|(k, v)| expr!(cons Expr::String(k.clone()), v.clone()))
+        .fold(y, flip(cons))
+        .pipe(Expr::List)
+}
+
+fn flip<A, B, R>(f: impl Fn(B, A) -> R) -> impl Fn(A, B) -> R {
+    move |b, a| f(a, b)
+}
+
 fn builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident {
@@ -259,7 +280,7 @@ fn builtins(ident: &str) -> Option<Expr> {
             "prn", [expr] => { println!("{expr}"); Expr::Nil },
 
             "read-string", [Expr::String(s)] => {
-                read::Input(s.clone()).tokenize().try_into()?
+                read::Input(s).tokenize().try_into()?
             },
             "slurp", [Expr::String(s)] => {
                 Expr::String(
@@ -277,7 +298,7 @@ fn builtins(ident: &str) -> Option<Expr> {
 
             "eval", [ast], env:env, ctx:ctx => ctx.eval(ast, Some(env))?,
             "eval-noenv", [ast], env:_, ctx:ctx => ctx.eval(ast, None)?,
-            "*ENV*", [], env:env => { println!("{env:#?}"); Expr::Nil },
+            "*ENV*", [], env:env => { env_to_expr(&env) },
 
             "throw", [err] => Err(QxErr::LispErr(err))?,
             "bye", [] => Err(QxErr::Stop)?,

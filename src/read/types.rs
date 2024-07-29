@@ -5,7 +5,7 @@ use thiserror::Error;
 
 use crate::{Func, Runtime};
 
-pub type PResult<T> = Result<T, QxErr>;
+pub type QxResult<T> = Result<T, QxErr>;
 
 pub mod closure;
 pub mod typing;
@@ -343,7 +343,7 @@ impl std::fmt::Debug for Expr {
 pub struct Input(pub EcoString);
 
 impl Input {
-    pub fn get(ctx: &mut crate::Term) -> PResult<Self> {
+    pub fn get(ctx: &mut crate::Term) -> QxResult<Self> {
         Ok(Self(super::get_inp(ctx)?.into()))
     }
 

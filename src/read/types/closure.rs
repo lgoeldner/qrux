@@ -1,15 +1,10 @@
-use ecow::{EcoString, EcoVec};
-
+use super::{kw::Keyword, Cons, Expr, QxErr, QxResult};
 use crate::env::Env;
+use ecow::EcoString;
 
-use super::{Cons, Expr, QxErr};
+pub mod args;
 
 /// TODO: Add Keyword Arguments, Finish this
-
-struct Args {
-    req: EcoVec<EcoString>,
-    opt: EcoVec<(EcoString, Expr)>,
-}
 
 #[derive(Debug)]
 pub struct Closure {
@@ -26,6 +21,7 @@ impl Clone for Closure {
 }
 
 impl Eq for Closure {}
+
 impl PartialEq for Closure {
     fn eq(&self, _: &Self) -> bool {
         false

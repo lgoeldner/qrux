@@ -17,7 +17,7 @@ use reedline::{
 use nu_ansi_term::{Color, Style};
 
 use env::{Env, Inner};
-use read::{Cons, Expr, PResult};
+use read::{Cons, Expr, QxResult};
 use slab::Slab;
 use tap::{Pipe, Tap};
 
@@ -73,7 +73,7 @@ impl Runtime {
     /// returns the new Runtime and the result of evaluating the prelude and,
     /// if supplied, the first `env::arg` as a file
 
-    pub fn new(repl: Term) -> (Self, PResult<Expr>) {
+    pub fn new(repl: Term) -> (Self, QxResult<Expr>) {
         let mut prototype = Self {
             repl,
             env: Inner::new_env(None),

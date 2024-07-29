@@ -16,10 +16,6 @@ macro_rules! expr {
         $crate::Expr::Sym($it.into())
     };
 
-    (list $($it:expr),*) => {
-        $crate::Expr::List(::std::rc::Rc::new([$($it), *]))
-    };
-
     (cons $($it:expr),*) => {
         $crate::Expr::List($crate::read::types::Cons::from(&[$($it), *]))
     };

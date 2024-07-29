@@ -1,6 +1,7 @@
 use crate::lazy::Lazy;
 use ecow::EcoString;
 use std::{
+    borrow::Borrow,
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
     ops::Index,
@@ -15,7 +16,7 @@ pub struct Table<K> {
     keys: HashMap<u64, K>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Keyword(u64);
 
 impl std::fmt::Display for Keyword {
@@ -29,8 +30,22 @@ impl std::fmt::Display for Keyword {
 }
 
 impl Keyword {
-    pub fn new(kw: EcoString) -> Self {
-        assert_eq!(&kw[..1], ":");
+    pub fn new(mut kw: EcoString) -> Self {
+        // if keyword is not prefixed with ':', add ':'
+        if !kw.starts_with(':') {
+            let mut new = EcoString::with_capacity(kw.len() + 1);
+            new.push(':');
+            new.push_str(&kw);
+            kw = new;
+        }
+
+        if KW_TABLE
+            .read()
+            .expect("Keyword Table is poisoned")
+            .contains(&kw)
+        {
+            return Self(Table::get_key(&kw));
+        }
 
         KW_TABLE
             .write()
@@ -38,7 +53,7 @@ impl Keyword {
             .insert(kw)
     }
 
-    pub fn inner_val<R>(&self, f: impl Fn(&str) -> R) -> R {
+    pub fn inspect_inner<R>(&self, f: impl Fn(&str) -> R) -> R {
         f(&KW_TABLE.read().expect("KW Table is poisoned")[self][1..])
     }
 }
