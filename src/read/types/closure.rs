@@ -10,7 +10,7 @@ pub mod args;
 
 #[derive(Debug)]
 pub struct Closure {
-    pub args_name: Box<[EcoString]>,
+    // pub args_name: Box<[EcoString]>,
     pub body: Expr,
     pub captured: Env,
     pub is_macro: bool,
@@ -33,25 +33,13 @@ impl PartialEq for Closure {
 
 impl Closure {
     pub fn new(args: Cons, body: Expr, captured: Env, is_macro: bool) -> QxResult<Self> {
-        let args_name = args
-            .into_iter()
-            .map(|it| match it {
-                Expr::Sym(s) => Ok(s),
-                _ => Err(QxErr::Any(anyhow::anyhow!("Not a symbol: {it:?}"))),
-            })
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>()
-            .into_boxed_slice();
-
-        let args = Args::new(args)?;
-
-        Ok(Self {
-            args_name,
+        Self {
             body,
             captured,
             is_macro,
-            args,
-        })
+            args: Args::new(args)?,
+        }
+        .pipe(Ok)
     }
 
     pub fn create_env(&self, inp: Cons) -> QxResult<Env> {

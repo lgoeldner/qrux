@@ -1,3 +1,13 @@
-(val! inc4 (fn* (a) (+ 4 a)))
 
-(prn (inc4 5))
+
+(defun! add (a (b 0))
+	(+ a (id b)))
+
+(defun! id (a) a)
+
+(defmacro! cut (&rest)
+	`(fn* (<>) ,rest))
+
+(val! i id)
+
+(export! '(add cut i))

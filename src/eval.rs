@@ -363,6 +363,7 @@ impl Runtime {
         }
     }
 
+    /// Todo: fix memory leak due to ref cycle without UB
     pub fn defenv(
         &mut self,
         ident: &EcoString,
@@ -373,18 +374,7 @@ impl Runtime {
         let res = self.eval(expr.clone(), env.clone())?;
         let env = env.as_mut().unwrap_or(&mut self.env);
 
-        // wether we should decrement the `env`s reference count
-        // in order to prevent a reference cycle from happening,
-        // if the closure captures the environment it is stored in
-        let has_ref_cycle =
-            matches!(&res, Expr::Closure(cl) if Rc::ptr_eq(&cl.captured.inner(), &env.inner()));
-
         env.set(ident.clone(), res, over)?;
-
-        if has_ref_cycle {
-            // prevent reference cycle because the closure is stored in the same env it captures
-            unsafe { Rc::decrement_strong_count(Rc::as_ptr(&env.inner())) };
-        }
 
         Ok(Expr::Nil)
     }

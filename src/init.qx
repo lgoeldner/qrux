@@ -6,8 +6,8 @@
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
 
-(defmacro! when (cond &body)
-	`(if ,cond (do ~body)))
+(defmacro! when (c &rest)
+	`(if ,c (do ~rest)))
 
 (defmacro! let (b e)
 	`((fn*
@@ -17,13 +17,12 @@
 (defun! t= (a b)
     (= (typeof a) (typeof b)))
 
-;;; Boolean Operators
+;; Boolean Operators
 (defun! not (bool)
 	(if bool
 		false
 		true))
 
-; macro for short circuiting
 (defmacro! and (lhs rhs)
 	`(if ,lhs
 		(if ,rhs
@@ -38,10 +37,6 @@
 			true
 			false)))
 
-(val! | or)
-(val! & and)
-(val! ! not)
-
 (defun! rep (str)
 	(eval
 		(read-string (del! str))))
@@ -55,7 +50,8 @@
 			"\n)")))
 
 ; swaps the order of two arguments
-(defun! flip (func) (fn* (a b) (func b a)))
+(defun! flip (func) 
+	(fn* (a b) (func b a)))
 
 (defun! append (el to)
 	(concat to (list el)))
@@ -86,11 +82,11 @@
 (defun! todo (message)
 	(throw (str "Not yet implemented: " message)))
 
-(defmacro! cond (&args)
-	(let*  (first (car args)
+(defmacro! cond (&rest)
+	(let*  (first (car rest)
 			condition (car first)
 			expr (nth 1 first)
-			next (cdr args))
+			next (cdr rest))
 			`(if ,condition
 				,expr
 				,(if next
@@ -110,8 +106,8 @@
 (defun! range (from to)
 	(_do-range from to '()))
 
-(defmacro! newenv (&to-do)
-	`(let* () (do ~to-do)))
+(defmacro! newenv (&rest)
+	`(let* () (do ~rest)))
 
 (defun! cadr (it)
 	(car (cdr it)))
@@ -143,10 +139,10 @@
 (defun! loadf-exported (path)
 	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
 
-(defmacro! list:iter (ident in lst &body)
+(defmacro! list:iter (ident in lst &rest)
 	(do 
 		(assert (= in 'in))
-	   `(map (fn* (,ident) (do ~body)) ,lst)))
+	   `(map (fn* (,ident) (do ~rest)) ,lst)))
 
 (defmacro! set! (ident val)
 	`(do (del! ,ident) (val! ,ident ,val)))

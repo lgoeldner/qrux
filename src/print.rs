@@ -122,14 +122,15 @@ impl std::fmt::Display for Expr {
     }
 }
 
+
 impl fmt::Display for Closure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             "".fmt(f)
         } else if self.is_macro {
-            write!(f, "<macro ({})>", self.args_name.join(" "))
+            write!(f, "<macro ({})>", self.args)
         } else {
-            write!(f, "<fn* ({}) {{{}}}>", self.args_name.join(" "), self.args)
+            write!(f, "<fn* ({})>", self.args)
         }
     }
 }
