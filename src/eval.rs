@@ -283,7 +283,7 @@ impl Runtime {
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         // create new env, set as current, old env is now self.env.outer
 
-        let mut env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
+        let env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
         for [binding, expr] in new_bindings.pair_iter() {
             let Expr::Sym(ident) = binding else {
@@ -506,7 +506,10 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
 
             qq_list(v)
         }
-        _ => Ok(expr!(cons expr!(sym "quote"), ast.clone())),
+        _ => Ok({
+            //expr!(cons expr!(sym "quote"), ast.clone());
+            cons(expr!(sym "quote"), Cons::new(ast.clone())).pipe(Expr::List)
+        }),
     }
 }
 

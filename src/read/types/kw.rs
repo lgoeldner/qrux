@@ -1,7 +1,6 @@
 use crate::lazy::Lazy;
 use ecow::EcoString;
 use std::{
-    borrow::Borrow,
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
     ops::Index,

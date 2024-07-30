@@ -31,26 +31,6 @@ impl PartialEq for Closure {
 impl Closure {
     #[must_use]
     pub fn new(args_name: Vec<EcoString>, body: Expr, captured: Env, is_macro: bool) -> Self {
-        let _hallo = args_name
-            .iter()
-            .enumerate()
-            .find_map(|it| (&**it.1 == "&rest").then_some(it.0))
-            .map_or_else(
-                || {
-                    let _args_name = args_name.clone().into_boxed_slice();
-                    0
-                },
-                |varargs_idx| {
-                    println!(
-                        "{} - &{} - {}",
-                        varargs_idx,
-                        varargs_idx,
-                        args_name.len() - (varargs_idx + 1)
-                    );
-                    0
-                },
-            );
-
         let args_name = args_name.into_boxed_slice();
         Self {
             args_name,

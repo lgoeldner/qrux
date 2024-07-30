@@ -6,9 +6,7 @@ use crate::{
     expr,
     lazy::Lazy,
     read::{
-        self,
-        types::{cons, ExprType, QxErr},
-        Cons, Expr,
+        self, kw::Keyword, types::{cons, ExprType, QxErr}, Cons, Expr
     },
     Func,
 };
@@ -274,7 +272,7 @@ fn builtins(ident: &str) -> Option<Expr> {
             // strict type eq
             "t-eq", [lhs, rhs] => Expr::Bool(lhs.get_type() == rhs.get_type()),
 
-            "typeof", [expr] => Expr::String(expr.get_type().to_string().into()),
+            "typeof", [expr] => Expr::Keyword(Keyword::new(expr.get_type().to_string().into())),
 
             "println", [expr] => { println!("{expr:#}"); Expr::Nil },
             "prn", [expr] => { println!("{expr}"); Expr::Nil },

@@ -9,6 +9,14 @@
 (defmacro! when (cond &body)
 	`(if ,cond (do ~body)))
 
+(defmacro! let (b e)
+	`((fn*
+        ,(map car b) ,e) 
+        ~(map cadr b)))
+
+(defun! t= (a b)
+    (= (typeof a) (typeof b)))
+
 ;;; Boolean Operators
 (defun! not (bool)
 	(if bool

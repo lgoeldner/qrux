@@ -1,5 +1,7 @@
 
+(defmacro! let (b e)
+	`((fn*
+        ,(map car b) ,e) 
+        ~(map cadr b)))
 
-(defmacro! let (&p b)
-	
-)
+(export! '(let))
