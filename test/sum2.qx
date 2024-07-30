@@ -1,14 +1,23 @@
 ;; https://leetcode.com/problems/two-sum/description/
 
-
-(defun! enum (l (acc ()) (i 0))
-	(if (empty? l)
+(defun! enum (lst (acc ()) (from 0))
+	(if (empty? lst)
 		(rev acc)
-		(enum (cdr l) (cons (list i (car l)) acc) (+ 1 i))))
+		(enum (cdr lst) (cons (list from (car lst)) acc) (+ 1 from))))
 
 (defun! sum2 (nums target)
-	(do
-		))
+	(let ((en (enum nums))) 
+		(map (fn* (a) (- target (cadr a))) en)))
+
+
+(defun! skip (lst n)
+	(if (= 0 n)
+		lst
+		(skip (cdr lst) (- n 1))))
+
+;; (defmacro! -> (f b)
+;; 	`(let* (r ,f)
+;; 		()))
 
 (defun! fold (init fn over)
 	(if (empty? over)
@@ -28,4 +37,4 @@
 			(cdr a) (cdr b)
 			(cons (list (car a) (car b)) acc))))
 
-(export! '(fold reduce zip enum ))
+(export! '(fold reduce zip enum sum2 skip))

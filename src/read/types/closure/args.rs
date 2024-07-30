@@ -1,4 +1,3 @@
-
 use super::{Cons, Expr, Keyword, QxErr, QxResult};
 use anyhow::anyhow;
 use ecow::{EcoString, EcoVec};
@@ -8,7 +7,6 @@ use tap::Pipe;
 #[derive(Debug, Clone)]
 pub struct Args {
     args: EcoVec<Arg>,
-    has_vararg: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -40,7 +38,7 @@ impl Arg {
 impl std::fmt::Display for Arg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.default {
-            Some(default) => write!(f, "({} ? {})", &self.name, &default),
+            Some(_) => write!(f, "{}?", &self.name),
             None => write!(f, "{}", &self.name),
         }
     }
@@ -109,13 +107,7 @@ impl Args {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // proto.sort_by_key(|it| it.kw);
-
-        Self {
-            args: proto.into(),
-            has_vararg,
-        }
-        .pipe(Ok)
+        Self { args: proto.into() }.pipe(Ok)
     }
 }
 

@@ -27,36 +27,6 @@ impl std::fmt::Debug for Cons {
     }
 }
 
-// fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result {
-//     match &**list {
-//         ConsCell {
-//             ref car,
-//             cdr: Cons(None),
-//         } => {
-//             if f.alternate() {
-//                 write!(f, "{car:#}")
-//             } else {
-//                 write!(f, "{car}")
-//             }
-//         }
-
-//         ConsCell {
-//             car,
-//             cdr: Cons(Some(ref cdr)),
-//         } => {
-//             if f.alternate() {
-//                 write!(f, "{car:#}")?;
-//             } else {
-//                 write!(f, "{car}")?;
-//             }
-
-//             write!(f, " ")?;
-
-//             write_cons_inner(f, cdr)
-//         }
-//     }
-// }
-
 fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result {
     let mut current = list;
 
