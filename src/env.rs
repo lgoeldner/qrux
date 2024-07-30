@@ -8,7 +8,6 @@ use crate::{
 mod ll_core;
 use ecow::EcoString;
 pub use ll_core::{core_func_names, core_map};
-use tap::Pipe;
 
 #[derive(Clone, Default)]
 pub struct Inner {

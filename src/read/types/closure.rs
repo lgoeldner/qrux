@@ -1,5 +1,5 @@
 use super::{kw::Keyword, Cons, Expr, QxErr, QxResult};
-use crate::env::Env;
+use crate::{env::Env, Runtime};
 use args::Args;
 use ecow::EcoString;
 use tap::Pipe;
@@ -42,7 +42,7 @@ impl Closure {
         .pipe(Ok)
     }
 
-    pub fn create_env(&self, inp: Cons) -> QxResult<Env> {
+    pub fn create_env(&self, inp: Cons, r: &mut Runtime) -> QxResult<Env> {
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         enum IsBound {
             Yes,
@@ -102,7 +102,6 @@ impl Closure {
 
                 let rest = rest_iter.cloned().collect::<Cons>();
                 insert(EcoString::from("rest"), Expr::List(rest));
-
                 break;
             }
 
@@ -125,55 +124,11 @@ impl Closure {
             .filter(|(i, _)| *i == IsBound::No)
             .filter_map(|(_, a)| a.default().as_ref().map(|default| (a.name(), default)))
         {
-            insert(ident, default.clone());
+            insert(ident, r.eval(default.clone(), Some(env.clone()))?);
         }
 
         Ok(env)
     }
-
-    // pub fn create_env(&self, args: Cons) -> Result<Env, QxErr> {
-    //     // match self.load_args(args.clone()) {
-    //     //     Ok(e) => {
-    //     //         dbg!(e.data());
-    //     //     }
-    //     //     Err(e) => {
-    //     //         dbg!(e);
-    //     //     }
-    //     // }
-
-    //     self.load_args(args)
-
-    //     // let env = Env::with_outer(self.captured.clone());
-    //     // let has_varargs = matches!(self.args_name.last(), Some(s) if s.starts_with('&'));
-
-    //     // let mut names = self.args_name.iter().peekable();
-    //     // let mut args = args;
-
-    //     // let insert_env = |it, to| env.inner().data.borrow_mut().insert(it, to);
-
-    //     // while let Some(name) = names.next() {
-    //     //     if names.peek().is_none() && has_varargs {
-    //     //         insert_env(name[1..].into(), Expr::List(args));
-
-    //     //         break;
-    //     //     }
-
-    //     //     insert_env(
-    //     //         name.clone(),
-    //     //         match args.car() {
-    //     //             Some(arg) => arg,
-    //     //             None => return Err(QxErr::NoArgs(Some(args), "create env")),
-    //     //         },
-    //     //     );
-
-    //     //     args = match args.cdr_opt() {
-    //     //         Some(args) => args,
-    //     //         None => return Err(QxErr::NoArgs(None, "create env")),
-    //     //     };
-    //     // }
-
-    //     // Ok(env)
-    // }
 }
 
 fn split_kw_args(args: Cons) -> QxResult<(Vec<(Keyword, Expr)>, Vec<Expr>)> {

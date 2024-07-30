@@ -1,0 +1,31 @@
+;; https://leetcode.com/problems/two-sum/description/
+
+
+(defun! enum (l (acc ()) (i 0))
+	(if (empty? l)
+		(rev acc)
+		(enum (cdr l) (cons (list i (car l)) acc) (+ 1 i))))
+
+(defun! sum2 (nums target)
+	(do
+		))
+
+(defun! fold (init fn over)
+	(if (empty? over)
+		init
+		(fold 
+			(fn init (car over))
+			fn
+			(cdr over))))
+
+(defun! reduce (fn over)
+	(fold (car over) fn (cdr over)))
+
+(defun! zip (a b (acc ()))
+	(if (or (empty? a) (empty? b))
+		(rev acc)
+		(zip 
+			(cdr a) (cdr b)
+			(cons (list (car a) (car b)) acc))))
+
+(export! '(fold reduce zip enum ))

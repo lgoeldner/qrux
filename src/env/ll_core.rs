@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use ecow::EcoString;
 use tap::Pipe;
 
 use crate::{
@@ -6,7 +7,10 @@ use crate::{
     expr,
     lazy::Lazy,
     read::{
-        self, kw::Keyword, types::{cons, ExprType, QxErr}, Cons, Expr
+        self,
+        kw::Keyword,
+        types::{cons, ExprType, QxErr},
+        Cons, Expr, QxResult,
     },
     Func,
 };
@@ -127,8 +131,11 @@ pub fn core_func_names() -> Vec<&'static str> {
         "swap!",
         "not",
         "time",
+        // strings
         "str:len",
         "str:splitby",
+        "str:_substr",
+        "str:chars",
         // types
         "int",
         "str",
@@ -136,6 +143,7 @@ pub fn core_func_names() -> Vec<&'static str> {
         "str?",
         "list?",
         "sym?",
+        "key?",
         // special forms
         "del!",
         "val!",
@@ -376,11 +384,11 @@ fn str_builtins(ident: &str) -> Option<Expr> {
                 )
             },
 
-            "str:substr", [Expr::String(string), Expr::Int(from), Expr::Int(to)] => {
+            "str:_substr", [Expr::String(string), Expr::Int(from), Expr::Int(to)] => {
                 Expr::String(
                     string
                         .get(as_usize(from)?..as_usize(to)?)
-                        .ok_or_else(|| anyhow!("str:substr: index out of bounds"))?
+                        .ok_or_else(|| anyhow!("str:_substr: index out of bounds"))?
                         .into()
                 )
             },
@@ -407,7 +415,16 @@ fn typeconvert(ident: &str) -> Option<Expr> {
 
             to_int(arg)
         }),
-        "int?" => func! {"int?"; [it] => Expr::Bool(matches!(it, Expr::Int(_))) },
+        "key:name" => func! {"key:name";
+            [Expr::Keyword(k)] => Expr::String(k.inspect_inner(|it| EcoString::from(it)))
+        },
+		"key" => func! {"key";
+			[any] => match any {
+				Expr::String(s) | Expr::Sym(s) => Expr::Keyword(Keyword::new(s)),
+				k @ Expr::Keyword(_) => k,
+				_ => Err(QxErr::TypeConvErr { from: any.get_type(), to: ExprType::Keyword })?,
+			}
+		},
         "str" => func! {"str";
             [] any @ .. =>
                 Expr::String(
@@ -420,9 +437,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                         .into()
                 )
         },
-        "str?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::String(_))) },
-        "sym?" => func! {"sym?"; [it] => Expr::Bool(matches!(it, Expr::Sym(_))) },
-        "list?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::List(_))) },
+        "sym" => func! {"sym"; [Expr::String(s)] => to_sym(s)? },
         "bool" => Func::new_expr("bool", |args, _, _| {
             let Some(arg) = args.car() else {
                 return Err(QxErr::NoArgs(None, "bool"));
@@ -431,9 +446,26 @@ fn typeconvert(ident: &str) -> Option<Expr> {
             to_bool(arg)
         }),
 
+        "int?" => func! {"int?"; [it] => Expr::Bool(matches!(it, Expr::Int(_))) },
+        "str?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::String(_))) },
+        "sym?" => func! {"sym?"; [it] => Expr::Bool(matches!(it, Expr::Sym(_))) },
+        "key?" => func! { "key?"; [it] => Expr::Bool(matches!(it, Expr::Keyword(_))) },
+        "list?" => func! {"list?"; [it] => Expr::Bool(matches!(it, Expr::List(_))) },
+
         _ => None::<Expr>?,
     }
     .pipe(Some)
+}
+
+fn to_sym(arg: EcoString) -> QxResult<Expr> {
+    if arg.chars().any(char::is_whitespace) {
+        Err(QxErr::TypeConvErr {
+            from: ExprType::String,
+            to: ExprType::Sym,
+        })
+    } else {
+        Ok(Expr::Sym(arg))
+    }
 }
 
 fn to_bool(arg: Expr) -> Result<Expr, QxErr> {

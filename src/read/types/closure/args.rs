@@ -1,4 +1,3 @@
-use crate::env::Env;
 
 use super::{Cons, Expr, Keyword, QxErr, QxResult};
 use anyhow::anyhow;

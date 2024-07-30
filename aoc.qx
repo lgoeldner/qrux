@@ -15,10 +15,7 @@
 			(cdr list)
 			(max rm (int (car list))))))
 
-(defun! max3 (with)
-	(_do_max3 with !!0 !!0 !!0))
-
-(defun! _do_max3 (lst r1 r2 r3)
+(defun! max3 (lst (r1 !!0) (r2 !!0) (r3 !!0))
 	(if (empty? lst)
 		(map deref (list r1 r2 r3))
 		(do
@@ -29,7 +26,7 @@
 				((> m @r2) (do (reset! r3 @r2) (reset! r2 m)))
 				((> m @r3) (reset! r3 m)))
 
-			(_do_max3 (cdr lst) r1 r2 r3))))
+			(max3 (cdr lst) r1 r2 r3))))
 
 (val! inp (slurp "inp.txt"))
 

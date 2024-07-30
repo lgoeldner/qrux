@@ -46,7 +46,7 @@
 	(rep
 		(str 
 			"(do\n" 
-			(slurp path)
+			(slurp (str path))
 			"\n)")))
 
 ; swaps the order of two arguments
@@ -98,16 +98,13 @@
 		(prn it)
 		it))
 
-(defun! _do-range (from to acc)
-	(if (from \< to)
-		(_do-range (from \+ 1) to (cons from acc))
+(defun! range (to (from 0) (acc ()))
+	(if (< from to)
+		(range to (from \+ 1) (cons from acc) )
 		(rev acc)))
 
-(defun! range (from to)
-	(_do-range from to '()))
-
 (defmacro! newenv (&rest)
-	`(let* () (do ~rest)))
+	`((fn* () (do ~rest))))
 
 (defun! cadr (it)
 	(car (cdr it)))
@@ -146,6 +143,12 @@
 
 (defmacro! set! (ident val)
 	`(do (del! ,ident) (val! ,ident ,val)))
+
+(defmacro! cut (&rest)
+	`(fn* (<>) ,rest))
+
+(defun! str:substr (s (from 0) (to (str:len s)))
+	(str:_substr s from to))
 
 (list:iter file in *ARGS*
 		(println (str "loading file: " (car *ARGS*)))

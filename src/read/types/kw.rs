@@ -1,7 +1,11 @@
 use crate::lazy::Lazy;
 use ecow::EcoString;
 use std::{
-    collections::HashMap, fmt::Debug, hash::{DefaultHasher, Hash, Hasher}, ops::Index, sync::RwLock
+    collections::HashMap,
+    fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
+    ops::Index,
+    sync::RwLock,
 };
 
 static KW_TABLE: Lazy<RwLock<Table<EcoString>>> = Lazy::new(Default::default);

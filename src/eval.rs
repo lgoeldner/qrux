@@ -7,7 +7,7 @@ use tap::prelude::*;
 use crate::{
     env::Env,
     expr,
-    read::{closure, cons, types::closure::Closure, Cons, Expr, ExprType, QxErr},
+    read::{cons, types::closure::Closure, Cons, Expr, ExprType, QxErr},
     special_form, Func, Runtime,
 };
 
@@ -252,7 +252,7 @@ impl Runtime {
                 // get the symbol to bind the error to
 
                 // create the env with the error
-                let mut err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
+                let err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
                 // bind the error
                 err_env
@@ -354,7 +354,7 @@ impl Runtime {
 
             Some(Expr::Closure(cl)) => ControlFlow::Continue(EvalTco {
                 ast: cl.body.clone(),
-                env: Some(early_ret!(cl.create_env(new.cdr()))),
+                env: Some(early_ret!(cl.create_env(new.cdr(), self))),
             }),
 
             Some(err) => err!(break "Not a Function: {err:?}"),
@@ -418,7 +418,7 @@ impl Runtime {
 
     fn macroexpand(&mut self, mut ast: Expr, env: &Option<Env>) -> Result<Expr, QxErr> {
         while let Some((macro_cl, args)) = self.is_macro_call(&ast, env) {
-            let new_env = macro_cl.create_env(args)?;
+            let new_env = macro_cl.create_env(args, self)?;
 
             ast = self.eval(macro_cl.body.clone(), Some(new_env))?;
         }

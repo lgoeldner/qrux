@@ -6,19 +6,17 @@
 )]
 // #![feature(try_trait_v2)]
 
-use std::{collections::HashSet, path::PathBuf, vec};
+use std::{path::PathBuf};
 
-use ecow::EcoString;
 use reedline::{
     DefaultPrompt, DefaultPromptSegment,
     FileBackedHistory, Reedline,
 };
 
-use nu_ansi_term::{Color, Style};
 
 use env::{Env, Inner};
 use read::{Cons, Expr, QxResult};
-use tap::{Pipe, Tap};
+use tap::{Pipe};
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;
 
