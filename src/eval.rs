@@ -331,21 +331,11 @@ impl Runtime {
         body: &Expr,
         is_macro: bool,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
-		let _t_nargs = closure::args::Args::new(args.clone()).unwrap();
-
-        let args = args
-            .into_iter()
-            .map(|it| match it {
-                Expr::Sym(s) => Ok(s),
-                _ => Err(QxErr::Any(anyhow!("Not a symbol: {it:?}"))),
-            })
-            .collect::<Result<_, _>>();
-
         let env = env.as_ref().unwrap_or(&self.env).clone();
 
-        let cl = Closure::new(early_ret!(args), body.clone(), env, is_macro);
+        let cl = Closure::new(args, body.clone(), env, is_macro);
 
-        break_ok!(Expr::Closure(Rc::new(cl)))
+        break_ok!(Expr::Closure(Rc::new(early_ret!(cl))))
     }
 
     fn apply_func(
@@ -421,7 +411,7 @@ impl Runtime {
 
     /// Returns the macro and args to it
     /// if the AST is a list, whose first element is a macro
-    fn is_macro_call(&mut self, ast: &Expr, env: &Option<Env>) -> Option<(Rc<Closure>, Cons)> {
+    fn is_macro_call(&self, ast: &Expr, env: &Option<Env>) -> Option<(Rc<Closure>, Cons)> {
         if let Expr::List(lst) = ast {
             if let Some(Expr::Sym(sym)) = lst.car() {
                 match env.as_ref().unwrap_or(&self.env).get(&sym) {
@@ -470,13 +460,14 @@ fn qq_list(elts: &Cons) -> Result<Expr, QxErr> {
     // TODO: rewrite with linked lists
     let mut acc = Cons::nil();
 
-    let elts = elts.into_iter().collect::<Vec<_>>();
-    for elt in elts.into_iter().rev() {
+    let rev = elts.clone().reversed();
+
+    for elt in &rev {
         match elt {
             Expr::List(ref v) if v.len_is(2) => {
-                if matches!(v.car(), Some(Expr::Sym(ref s)) if &** s == "splice-unquote") {
+                if matches!(v.car(), Some(Expr::Sym(ref s)) if &**s == "splice-unquote") {
                     acc = Cons::from(&[
-                        expr!(concat),
+                        expr!(sym "concat"),
                         v.nth(1).ok_or(QxErr::NoArgs(None, "splice-unqote"))?,
                         Expr::List(acc),
                     ]);

@@ -129,7 +129,7 @@ impl fmt::Display for Closure {
         } else if self.is_macro {
             write!(f, "<macro ({})>", self.args_name.join(" "))
         } else {
-            write!(f, "<fn* ({})>", self.args_name.join(" "))
+            write!(f, "<fn* ({}) {{{}}}>", self.args_name.join(" "), self.args)
         }
     }
 }

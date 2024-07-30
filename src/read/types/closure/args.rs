@@ -1,14 +1,18 @@
+use crate::env::Env;
+
 use super::{Cons, Expr, Keyword, QxErr, QxResult};
 use anyhow::anyhow;
-use ecow::EcoString;
-use std::fmt::Display;
+use ecow::{EcoString, EcoVec};
+use std::fmt::{Debug, Display};
 use tap::Pipe;
 
+#[derive(Debug, Clone)]
 pub struct Args {
-    /// sorted by `[Arg].kw` to do a binary search for lookup
-    args: Box<[Arg]>,
+    args: EcoVec<Arg>,
+    has_vararg: bool,
 }
 
+#[derive(Debug, Clone)]
 pub struct Arg {
     is_vararg: bool,
     name: EcoString,
@@ -16,11 +20,29 @@ pub struct Arg {
     default: Option<Expr>,
 }
 
+impl Arg {
+    pub const fn is_vararg(&self) -> bool {
+        self.is_vararg
+    }
+
+    pub fn name(&self) -> EcoString {
+        self.name.clone()
+    }
+
+    pub const fn kw(&self) -> Keyword {
+        self.kw
+    }
+
+    pub const fn default(&self) -> &Option<Expr> {
+        &self.default
+    }
+}
+
 impl std::fmt::Display for Arg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.default {
-            Some(default) => write!(f, "({} {} {})", self.kw, self.name, default),
-            None => write!(f, "{} {}", self.kw, self.name),
+            Some(default) => write!(f, "({} ? {})", &self.name, &default),
+            None => write!(f, "{}", &self.name),
         }
     }
 }
@@ -63,20 +85,24 @@ impl TryFrom<Expr> for Arg {
 }
 
 impl Args {
-    pub fn new(args: Cons) -> QxResult<Self> {
-        let mut is_vararg = false;
+    pub const fn args(&self) -> &EcoVec<Arg> {
+        &self.args
+    }
 
-        let mut proto = args
+    pub fn new(args: Cons) -> QxResult<Self> {
+        let mut has_vararg = false;
+
+        let proto = args
             .into_iter()
             .map(Arg::try_from)
             .map(|it| {
-				// if it is a &rest, there must only be one
+                // if it is a &rest, there must only be one
                 it.and_then(|it| {
                     if it.is_vararg {
-                        if is_vararg {
+                        if has_vararg {
                             Err(QxErr::Any(anyhow!("ArgsErr: Multiple varargs.")))?;
                         } else {
-                            is_vararg = true;
+                            has_vararg = true;
                         }
                     }
                     Ok(it)
@@ -84,15 +110,19 @@ impl Args {
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        proto.sort_by_key(|it| it.kw);
+        // proto.sort_by_key(|it| it.kw);
 
-        Self { args: proto.into() }.pipe(Ok)
+        Self {
+            args: proto.into(),
+            has_vararg,
+        }
+        .pipe(Ok)
     }
 }
 
 impl Display for Args {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Args (")?;
+        // write!(f, "Args (")?;
 
         if let Some(first) = self.args.first() {
             write!(f, "{first}")?;
@@ -102,6 +132,7 @@ impl Display for Args {
             write!(f, " {arg}")?;
         }
 
-        write!(f, ")")
+        // write!(f, ")")
+        Ok(())
     }
 }

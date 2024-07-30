@@ -1,10 +1,7 @@
 use crate::lazy::Lazy;
 use ecow::EcoString;
 use std::{
-    collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
-    ops::Index,
-    sync::RwLock,
+    collections::HashMap, fmt::Debug, hash::{DefaultHasher, Hash, Hasher}, ops::Index, sync::RwLock
 };
 
 static KW_TABLE: Lazy<RwLock<Table<EcoString>>> = Lazy::new(Default::default);
@@ -15,7 +12,7 @@ pub struct Table<K> {
     keys: HashMap<u64, K>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Keyword(u64);
 
 impl std::fmt::Display for Keyword {
@@ -25,6 +22,12 @@ impl std::fmt::Display for Keyword {
             "{}",
             KW_TABLE.read().expect("Keyword Table is poisoned")[self]
         )
+    }
+}
+
+impl Debug for Keyword {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Keyword({self})")
     }
 }
 
