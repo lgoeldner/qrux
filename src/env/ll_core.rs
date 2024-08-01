@@ -9,7 +9,7 @@ use crate::{
     read::{
         self,
         kw::Keyword,
-        types::{cons, ExprType, QxErr},
+        types::{cons, ExprType as Type, QxErr},
         Cons, Expr, QxResult,
     },
     Func,
@@ -164,25 +164,10 @@ fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
     } else {
         let mut iter = args.into_iter();
 
-        let first = match iter.next().unwrap() {
-            Expr::Int(first) => first,
-            el => {
-                return Err(QxErr::TypeErr {
-                    expected: ExprType::Int,
-                    found: el.get_type(),
-                })
-            }
-        };
+        let first = iter.next().unwrap().to_int()?;
 
         iter.try_fold(first, |acc, el| {
-            if let Expr::Int(int) = el {
-                op(acc, int).ok_or(QxErr::IntOverflowErr)
-            } else {
-                Err(QxErr::TypeErr {
-                    expected: ExprType::Int,
-                    found: el.get_type(),
-                })
-            }
+            op(acc, el.to_int()?).ok_or(QxErr::IntOverflowErr)
         })
         .map(Expr::Int)
     }
@@ -196,10 +181,10 @@ fn int_ops(ident: &str) -> Option<Expr> {
         "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
         "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args)),
 
-        ">" => func! {">"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs > rhs) },
-        "<" => func! {"<"; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs < rhs) },
-        ">=" => func! {">="; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs >= rhs) },
-        "<=" => func! {"<="; [Expr::Int(lhs), Expr::Int(rhs)] => Expr::Bool(lhs <= rhs) },
+        ">" => func! { ">";  [lhs, rhs] => Expr::Bool(lhs.to_int()? > rhs.to_int()?) },
+        "<" => func! { "<";  [lhs, rhs] => Expr::Bool(lhs.to_int()? < rhs.to_int()?) },
+        ">=" => func! {">="; [lhs, rhs] => Expr::Bool(lhs.to_int()? >= rhs.to_int()?) },
+        "<=" => func! {"<="; [lhs, rhs] => Expr::Bool(lhs.to_int()? <= rhs.to_int()?) },
         _ => None?,
     }
     .into()
@@ -220,20 +205,21 @@ fn list_builtins(ident: &str) -> Option<Expr> {
                 .map_or(Expr::Nil, Expr::List)
             },
 
-            "rev", [Expr::List(it)] => Expr::List(it.reversed()),
-            "cons", [el, Expr::List(lst)] => Expr::List(cons(el, lst)),
-            "car", [Expr::List(lst)] => lst.car().unwrap_or(Expr::Nil),
-            "cdr", [Expr::List(lst)] => Expr::List(lst.cdr()),
+            "rev", [it] => Expr::List(it.to_list()?.reversed()),
+            "cons", [el, lst] => Expr::List(cons(el, lst.to_list()?)),
+            "car", [lst] => lst.to_list()?.car().unwrap_or(Expr::Nil),
+            "cdr", [lst] => Expr::List(lst.to_list()?.cdr()),
             "list", [] rest @ .. => Expr::List(rest),
-            "count", [Expr::List(lst)] => Expr::Int(lst.into_iter().count().pipe(as_i64)?),
-            "empty?", [Expr::List(lst)] => Expr::Bool(lst.len_is(0)),
-            "apply", [func, Expr::List(args)], env:env, ctx:ctx => {
-                ctx.eval(Expr::List(cons(func,args)), Some(env))?
+            "count", [lst] => Expr::Int(lst.to_list()?.into_iter().count().pipe(as_i64)?),
+            "empty?", [lst] => Expr::Bool(lst.to_list()?.len_is(0)),
+            "apply", [func, args], env:env, ctx:ctx => {
+                ctx.eval(Expr::List(cons(func,args.to_list()?)), Some(env))?
             },
-            "nth", [Expr::Int(i), Expr::List(c)] => {
-                c.into_iter()
-                 .nth(i.pipe(as_usize)?)
-                 .ok_or(QxErr::NoArgs(None, ""))?
+            "nth", [i, c] => {
+                c.to_list()?
+                 .into_iter()
+                 .nth(i.to_int()?.pipe(as_usize)?)
+                 .ok_or(QxErr::NoArgs(None, "nth"))?
             },
         }
     }
@@ -273,8 +259,8 @@ fn builtins(ident: &str) -> Option<Expr> {
             // loose type eq
             "t-eq?", [lhs, rhs] => Expr::Bool(
                 // not null safe
-                lhs.get_type() == ExprType::Nil
-                || rhs.get_type() == ExprType::Nil
+                lhs.get_type() == Type::Nil
+                || rhs.get_type() == Type::Nil
                 || lhs.get_type() == rhs.get_type()
             ),
             // strict type eq
@@ -285,18 +271,18 @@ fn builtins(ident: &str) -> Option<Expr> {
             "println", [expr] => { println!("{expr:#}"); Expr::Nil },
             "prn", [expr] => { println!("{expr}"); Expr::Nil },
 
-            "read-string", [Expr::String(s)] => {
-                read::Input(s).tokenize().try_into()?
+            "read-string", [s] => {
+                read::Input(s.as_strt(Type::String)?).tokenize().try_into()?
             },
-            "slurp", [Expr::String(s)] => {
+            "slurp", [s] => {
                 Expr::String(
-                    std::fs::read_to_string(&s as &str)
+                    std::fs::read_to_string(&s.as_strt(Type::String)? as &str)
                     .map_err(|err| QxErr::Any(err.into()))?
                     .into()
                 )
             },
-            "writef", [Expr::String(file_location), Expr::String(to_write)] => {
-                match std::fs::write(&*file_location, to_write.as_bytes()) {
+            "writef", [file_location, to_write] => {
+                match std::fs::write(&*file_location.as_strt(Type::String)?, to_write.as_strt(Type::String)?.as_bytes()) {
                     Ok(()) => Expr::Nil,
                     Err(err) => Err(QxErr::Any(err.into()))?
                 }
@@ -312,9 +298,11 @@ fn builtins(ident: &str) -> Option<Expr> {
 
             "atom", [ex] => Expr::Atom(Rc::new(RefCell::new(ex))),
             "atom?", [ex] => Expr::Bool(matches!(ex, Expr::Atom(_))),
-            "deref", [Expr::Atom(atom)] => {
-                let inner = atom.borrow();
-                inner.clone()
+            "deref", [atom] => {
+                match atom {
+                    Expr::Atom(atom) => atom.borrow().clone(),
+                    e => e,
+                }
             },
             "reset!", [Expr::Atom(atom), new] => atom.replace(new),
             "swap!", [Expr::Atom(atom), cl @ Expr::Closure(_)] args @ ..,
@@ -330,7 +318,7 @@ fn builtins(ident: &str) -> Option<Expr> {
 
                     res
             },
-            "not", [Expr::Bool(b)] => Expr::Bool(!b),
+            "not", [b] => Expr::Bool(!b.to_bool()?),
             "time", [] => Expr::Int(
                 FIRST_TIME
                     .elapsed()
@@ -341,14 +329,14 @@ fn builtins(ident: &str) -> Option<Expr> {
             ),
 
             // move to the global env
-            "export!", [Expr::List(l)], env:env, ctx:ctx => {
+            "export!", [l], env:env, ctx:ctx => {
                 if Rc::ptr_eq(&env.inner(), &ctx.env.inner()) {
                     Err(anyhow!("ExportError: Nowhere to Export"))?;
                 }
 
-                for ident in &l {
+                for ident in &l.to_list()? {
                     let Expr::Sym(s) = ident else {
-                        Err(QxErr::TypeErr { expected: ExprType::Sym, found: ident.get_type() })?
+                        Err(QxErr::TypeErr { expected: Type::Sym, found: ident.get_type() })?
                     };
 
                     let Some(ex) = env.get(&s) else {
@@ -400,7 +388,7 @@ fn str_builtins(ident: &str) -> Option<Expr> {
             "str:splitby", [Expr::String(s), Expr::String(sep)] => Expr::List(
                 s.split(&*sep)
                  .map(|it| Expr::String(it.into()))
-                 .collect::<Cons>()
+                 .collect()
             ),
         }
     }
@@ -418,13 +406,9 @@ fn typeconvert(ident: &str) -> Option<Expr> {
         "key:name" => func! {"key:name";
             [Expr::Keyword(k)] => Expr::String(k.inspect_inner(|it| EcoString::from(it)))
         },
-		"key" => func! {"key";
-			[any] => match any {
-				Expr::String(s) | Expr::Sym(s) => Expr::Keyword(Keyword::new(s)),
-				k @ Expr::Keyword(_) => k,
-				_ => Err(QxErr::TypeConvErr { from: any.get_type(), to: ExprType::Keyword })?,
-			}
-		},
+        "key" => func! {"key";
+            [any] => any.as_strt(Type::Keyword)?.pipe(Keyword::new).pipe(Expr::Keyword)
+        },
         "str" => func! {"str";
             [] any @ .. =>
                 Expr::String(
@@ -437,7 +421,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                         .into()
                 )
         },
-        "sym" => func! {"sym"; [Expr::String(s)] => to_sym(s)? },
+        "sym" => func! {"sym"; [ref s] => to_sym(s)? },
         "bool" => Func::new_expr("bool", |args, _, _| {
             let Some(arg) = args.car() else {
                 return Err(QxErr::NoArgs(None, "bool"));
@@ -457,38 +441,20 @@ fn typeconvert(ident: &str) -> Option<Expr> {
     .pipe(Some)
 }
 
-fn to_sym(arg: EcoString) -> QxResult<Expr> {
-    if arg.chars().any(char::is_whitespace) {
+fn to_sym(arg: &Expr) -> QxResult<Expr> {
+    let s = arg.as_strt(Type::Sym)?;
+    if s.chars().any(char::is_whitespace) {
         Err(QxErr::TypeConvErr {
-            from: ExprType::String,
-            to: ExprType::Sym,
+            from: Type::String,
+            to: Type::Sym,
         })
     } else {
-        Ok(Expr::Sym(arg))
+        Ok(Expr::Sym(s))
     }
 }
 
 fn to_bool(arg: Expr) -> Result<Expr, QxErr> {
-    match arg {
-        Expr::Atom(a) => to_bool(a.borrow().clone()),
-        Expr::Bool(_) => Ok(arg),
-        Expr::Nil => Ok(Expr::Bool(false)),
-        Expr::Int(it) => Ok(Expr::Bool(it != 0)),
-        Expr::String(ref s) => s.parse::<bool>().map_or_else(
-            |it| {
-                Err(QxErr::TypeParseErr {
-                    from: arg,
-                    to: ExprType::Bool,
-                    err: it.into(),
-                })
-            },
-            |it| Ok(Expr::Bool(it)),
-        ),
-        _ => Err(QxErr::TypeConvErr {
-            from: arg.get_type(),
-            to: ExprType::Bool,
-        }),
-    }
+    arg.to_bool().map(Expr::Bool)
 }
 
 fn to_int(arg: Expr) -> Result<Expr, QxErr> {

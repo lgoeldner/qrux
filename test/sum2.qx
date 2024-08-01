@@ -9,15 +9,10 @@
 	(let ((en (enum nums))) 
 		(map (fn* (a) (- target (cadr a))) en)))
 
-
 (defun! skip (lst n)
 	(if (= 0 n)
 		lst
 		(skip (cdr lst) (- n 1))))
-
-;; (defmacro! -> (f b)
-;; 	`(let* (r ,f)
-;; 		()))
 
 (defun! fold (init fn over)
 	(if (empty? over)

@@ -2,21 +2,18 @@
 #![allow(
     clippy::missing_errors_doc,
     clippy::missing_panics_doc,
-    clippy::must_use_candidate
+    clippy::must_use_candidate,
+    clippy::use_self,
 )]
 // #![feature(try_trait_v2)]
 
-use std::{path::PathBuf};
+use std::path::PathBuf;
 
-use reedline::{
-    DefaultPrompt, DefaultPromptSegment,
-    FileBackedHistory, Reedline,
-};
-
+use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 
 use env::{Env, Inner};
 use read::{Cons, Expr, QxResult};
-use tap::{Pipe};
+use tap::Pipe;
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;
 
