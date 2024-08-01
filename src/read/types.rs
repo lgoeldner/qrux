@@ -11,6 +11,7 @@ pub mod closure;
 pub mod typing;
 pub use closure::Closure;
 pub mod kw;
+pub mod cast;
 
 /// cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
@@ -27,6 +28,7 @@ pub enum Expr {
     #[default]
     Nil,
 }
+
 
 #[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
 pub enum ExprType {
@@ -83,6 +85,9 @@ pub enum QxErr {
 
     #[error("TypeConvertErr from {from} to {to}")]
     TypeConvErr { from: ExprType, to: ExprType },
+    
+    #[error("TypeConvertErr from {val} ({from}) to {to}")]
+    TypeConvValErr {from: ExprType, val: Expr, to: ExprType},
 
     #[error("TypeParseErr from {from} to {to}: {err}")]
     TypeParseErr {
