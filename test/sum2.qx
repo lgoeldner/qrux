@@ -1,13 +1,7 @@
-;; https://leetcode.com/problems/two-sum/description/
-
 (defun! enum (lst (acc ()) (from 0))
 	(if (empty? lst)
 		(rev acc)
 		(enum (cdr lst) (cons (list from (car lst)) acc) (+ 1 from))))
-
-(defun! sum2 (nums target)
-	(let ((en (enum nums))) 
-		(map (fn* (a) (- target (cadr a))) en)))
 
 (defun! skip (lst n)
 	(if (= 0 n)
@@ -32,12 +26,39 @@
 			(cdr a) (cdr b)
 			(cons (list (car a) (car b)) acc))))
 
+;; into: function or incomplete expr
+;; like: +, (+ 10), (cons '(1 2 3 4))
 (defmacro! insertarg (this into)
-  (let
-    ((fun (car into)))
-    (cons fun (cons this (cdr into)))))
+  (if (list? into)
+    (let 
+      ((fun (car into)))
+      (cons fun (cons this (cdr into))))
+    (cons into this)))
 
-(defmacro! -> (v1 &rest)
-	(insertarg v1 (dbg (car rest))))
+(defun! cons* (&items onto)
+  (if (empty? items)
+    onto
+    (cons* (cdr items) (cons (car items) onto))))
 
-(export! '(fold reduce zip enum sum2 skip -> insertarg))
+;; (-> a (b 2) (c 3 4))
+;; => (c (b a 2) 3 4)
+(defmacro! thread-list (v1 into)
+  (if (empty? into)
+    v1
+    `(thread-list (insertarg ,v1 ,(car into)) ,(cdr into))))
+
+(defmacro! -> (start &rest)
+  `(thread-list ,start ,rest))
+
+(export! 
+'(fold
+  reduce
+  zip
+  enum
+  sum2
+  skip
+  ->
+  thread-list
+  insertarg
+  cons*
+  ))

@@ -88,8 +88,8 @@ impl Closure {
             .filter(|&(i, _)| i == IsBound::No)
             .map(|(_, a)| a);
 
-		// load the "normal" arguments and varargs
-		// if there are no more idents to bind to or there are varargs, `None` remaining args are returned.
+        // load the "normal" arguments and varargs
+        // if there are no more idents to bind to or there are varargs, `None` remaining args are returned.
         let remaining_args = loop {
             let Some(ident) = rem_idents_iter.next() else {
                 break Some(args);
@@ -98,12 +98,18 @@ impl Closure {
             // load varargs
             if ident.is_vararg() {
                 for a in rem_idents_iter.rev() {
+                    bound_idents
+                        .iter_mut()
+                        .find(|(i, arg)| *i == IsBound::No && arg.kw() == a.kw())
+                        .ok_or_else(|| QxErr::Any(anyhow::anyhow!("{ident} is not required!")))?
+                        .0 = IsBound::Yes;
+
                     let ex = args.next_back().unwrap();
                     insert(a.name(), ex.clone());
                 }
 
                 let rest = args.cloned().collect::<Cons>();
-                insert(EcoString::from("rest"), dbg!(Expr::List(rest)));
+                insert(ident.name(), Expr::List(rest));
                 break None;
             }
 
@@ -120,7 +126,7 @@ impl Closure {
             insert(ident.name(), ex.clone());
         };
 
-		// insert defaults
+        // insert defaults
         for (k, v) in bound_idents
             .iter_mut()
             .filter(|(i, _)| *i == IsBound::No)
@@ -134,7 +140,7 @@ impl Closure {
             insert(k, r.eval(v.clone(), Some(env.clone()))?);
         }
 
-		// check for missing args
+        // check for missing args
         if bound_idents
             .iter()
             .any(|(i, a)| !a.is_vararg() && *i == IsBound::No)
@@ -151,7 +157,7 @@ impl Closure {
             )));
         }
 
-		// check for leftover args
+        // check for leftover args
         if let Some(mut i) = remaining_args.map(Iterator::peekable) {
             if i.peek().is_some() {
                 return Err(QxErr::Any(anyhow::anyhow!(

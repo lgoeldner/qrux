@@ -48,6 +48,14 @@ impl TryFrom<Expr> for Arg {
     type Error = QxErr;
 
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
+        let get_vararg_sym = |it: EcoString| {
+            if it.starts_with('&') {
+                (true, it[1..].into())
+            } else {
+                (false, it)
+            }
+        };
+        
         match &value {
         Expr::List(ref cons) if cons.len_is(2) => 'err: {
 				let Some(Expr::Sym(sym)) = cons.car() else {
@@ -57,21 +65,24 @@ impl TryFrom<Expr> for Arg {
 				let Some(default) = cons.cdr().car() else {
 					break 'err None;
 				};
-
+				
+				let (is_vararg, name) = get_vararg_sym(sym);
+				
 				Self {
-					is_vararg: sym == "&rest",
+					is_vararg,
 					default: Some(default),
-					kw: Keyword::new(sym.clone()),
-					name: sym,
+					kw: Keyword::new(name.clone()),
+					name,
 				}.pipe(Some)
 			},
 
-			Expr::Sym(name) => {
+			Expr::Sym(sym) => {
+			    let (is_vararg, name) = get_vararg_sym(sym.clone());
 				Self {
-					is_vararg: name == "&rest",
+					is_vararg,
 					default: None,
 					kw: Keyword::new(name.clone()),
-					name: name.clone(),
+					name,
 				}.pipe(Some)
 			}
         _ => None,

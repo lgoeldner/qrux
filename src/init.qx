@@ -132,10 +132,8 @@
 (defun! loadf-exported (path)
 	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
 
-(defmacro! list:iter (ident in lst &rest)
-	(do 
-		(assert (= in 'in))
-	   `(map (fn* (,ident) (do ~rest)) ,lst)))
+(defmacro! list:iter (ident in &rest)
+	   `(map (fn* (,ident) (do ~rest)) ,in))
 
 (defmacro! set! (ident val)
 	`(do (del! ,ident) (val! ,ident ,val)))
@@ -143,9 +141,9 @@
 (defun! str:substr (s (from 0) (to (str:len s)))
 	(str:_substr s from to))
 
-(list:iter file in *ARGS*
+(list:iter file :in *ARGS*
 		(println (str "loading file: " (car *ARGS*)))
 		(try* (loadf (car *ARGS*))
-			(catch* ex (println (str "failed to load `"file"`: " ex)))))
+			(catch* ex (println (str "failed to load `" file "`: " ex)))))
 
 )
