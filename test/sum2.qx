@@ -26,39 +26,24 @@
 			(cdr a) (cdr b)
 			(cons (list (car a) (car b)) acc))))
 
-;; into: function or incomplete expr
-;; like: +, (+ 10), (cons '(1 2 3 4))
-(defmacro! insertarg (this into)
-  (if (list? into)
-    (let 
-      ((fun (car into)))
-      (cons fun (cons this (cdr into))))
-    (cons into this)))
-
 (defun! cons* (&items onto)
   (if (empty? items)
     onto
     (cons* (cdr items) (cons (car items) onto))))
 
-;; (-> a (b 2) (c 3 4))
-;; => (c (b a 2) 3 4)
-(defmacro! thread-list (v1 into)
-  (if (empty? into)
-    v1
-    `(thread-list (insertarg ,v1 ,(car into)) ,(cdr into))))
+(defun! flatmap (f over (acc ()))
+  (if (empty? over)
+    (rev acc)
+    (let* (el (car over)  next (if (list? el) (flatmap f (car over)) (f el)))
+      (flatmap f :over (cdr over) :acc (cons next acc)))))
 
-(defmacro! -> (start &rest)
-  `(thread-list ,start ,rest))
 
-(export! 
-'(fold
-  reduce
-  zip
-  enum
-  sum2
-  skip
-  ->
-  thread-list
-  insertarg
-  cons*
-  ))
+(export!
+  '(fold
+    reduce
+    zip
+    enum
+    skip
+    cons*
+    flatmap
+    ))

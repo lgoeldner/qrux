@@ -242,7 +242,7 @@ fn env_to_expr(env: &Env) -> Expr {
     env.data()
         .borrow()
         .iter()
-        .map(|(k, v)| expr!(cons Expr::String(k.clone()), v.clone()))
+        .map(|(k, v)| expr!(cons Expr::Sym(k.clone()), v.clone()))
         .fold(y, flip(cons))
         .pipe(Expr::List)
 }
@@ -304,9 +304,10 @@ fn builtins(ident: &str) -> Option<Expr> {
                     e => e,
                 }
             },
-            "reset!", [Expr::Atom(atom), new] => atom.replace(new),
-            "swap!", [Expr::Atom(atom), cl @ Expr::Closure(_)] args @ ..,
+            "reset!", [atom, new] => atom.to_atom()?.replace(new),
+            "swap!", [atom, cl @ Expr::Closure(_)] args @ ..,
                 env:env, ctx:ctx => {
+                    let atom = atom.to_atom()?;
                     let res = ctx.eval(
                         Expr::List(
                             cons(cl, cons(atom.take(), args))
