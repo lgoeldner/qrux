@@ -492,25 +492,5 @@ fn to_bool(arg: Expr) -> Result<Expr, QxErr> {
 }
 
 fn to_int(arg: Expr) -> Result<Expr, QxErr> {
-    match arg {
-        Expr::Atom(a) => to_int(a.borrow().clone()),
-        Expr::String(ref s) => s.parse::<i64>().map_or_else(
-            |it| {
-                Err(QxErr::TypeParseErr {
-                    from: arg,
-                    to: ExprType::Bool,
-                    err: it.into(),
-                })
-            },
-            |it| Ok(Expr::Int(it)),
-        ),
-        Expr::Int(_) => Ok(arg),
-        Expr::Bool(b) => Ok(Expr::Int(i64::from(b))),
-        Expr::Nil => Ok(Expr::Int(0)),
-
-        _ => Err(QxErr::TypeConvErr {
-            from: arg.get_type(),
-            to: ExprType::Int,
-        }),
-    }
+    arg.to_int().map(Expr::Int)
 }
