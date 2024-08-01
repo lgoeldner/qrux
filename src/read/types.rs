@@ -13,10 +13,12 @@ pub use closure::Closure;
 pub mod kw;
 pub mod cast;
 
+pub type Atom = Rc<RefCell<Expr>>;
+
 /// cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
-    Atom(Rc<RefCell<Expr>>),
+    Atom(Atom),
     Closure(Rc<Closure>),
     Func(Func),
     Int(i64),

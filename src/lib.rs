@@ -68,10 +68,7 @@ impl Runtime {
     /// if supplied, the first `env::arg` as a file
 
     pub fn new(repl: Term) -> (Self, QxResult<Expr>) {
-        let mut prototype = Self {
-            repl,
-            env: Inner::new_env(None),
-        };
+        let mut prototype = Self::without_prelude(repl);
 
         prototype
             .env
@@ -93,13 +90,12 @@ impl Runtime {
     }
 
     #[must_use]
-    /// # Safety
     /// Any Code evaluated with this runtime will not
     /// have access to the prelude.
-    pub unsafe fn without_prelude(repl: Term) -> Self {
+    pub fn without_prelude(repl: Term) -> Self {
         Self {
             repl,
-            env: Inner::new_env(None),
+            env: env::Inner::new_env(None),
         }
     }
 

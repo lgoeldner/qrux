@@ -401,7 +401,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                 return Err(QxErr::NoArgs(None, "int"));
             };
 
-            to_int(arg)
+            arg.to_int().map(Expr::Int)
         }),
         "key:name" => func! {"key:name";
             [Expr::Keyword(k)] => Expr::String(k.inspect_inner(|it| EcoString::from(it)))
@@ -427,7 +427,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
                 return Err(QxErr::NoArgs(None, "bool"));
             };
 
-            to_bool(arg)
+            arg.to_bool().map(Expr::Bool)
         }),
 
         "int?" => func! {"int?"; [it] => Expr::Bool(matches!(it, Expr::Int(_))) },
@@ -451,12 +451,4 @@ fn to_sym(arg: &Expr) -> QxResult<Expr> {
     } else {
         Ok(Expr::Sym(s))
     }
-}
-
-fn to_bool(arg: Expr) -> Result<Expr, QxErr> {
-    arg.to_bool().map(Expr::Bool)
-}
-
-fn to_int(arg: Expr) -> Result<Expr, QxErr> {
-    arg.to_int().map(Expr::Int)
 }

@@ -32,4 +32,12 @@
 			(cdr a) (cdr b)
 			(cons (list (car a) (car b)) acc))))
 
-(export! '(fold reduce zip enum sum2 skip))
+(defmacro! insertarg (this into)
+  (let
+    ((fun (car into)))
+    (cons fun (cons this (cdr into)))))
+
+(defmacro! -> (v1 &rest)
+	(insertarg v1 (dbg (car rest))))
+
+(export! '(fold reduce zip enum sum2 skip -> insertarg))

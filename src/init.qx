@@ -17,11 +17,8 @@
 (defun! t= (a b)
     (= (typeof a) (typeof b)))
 
-;; Boolean Operators
-(defun! not (bool)
-	(if bool
-		false
-		true))
+(defmacro! cut (&rest)
+	`(fn* (<>) ,rest))
 
 (defmacro! and (lhs rhs)
 	`(if ,lhs
@@ -43,11 +40,14 @@
 
 ; load a file and execute it with a do block wrapped around
 (defun! loadf (path)
-	(rep
-		(str 
-			"(do\n" 
-			(slurp (str path))
-			"\n)")))
+		(rep
+			(str 
+				"(do\n" 
+				(slurp (str path))
+				"\n)")))
+
+(defmacro! fn (form)
+  `(fn* () ,form))
 
 ; swaps the order of two arguments
 (defun! flip (func) 
@@ -100,7 +100,7 @@
 
 (defun! range (to (from 0) (acc ()))
 	(if (< from to)
-		(range to (from \+ 1) (cons from acc) )
+		(range to :from (+ from 1) :acc (cons from acc))
 		(rev acc)))
 
 (defmacro! newenv (&rest)
@@ -121,17 +121,13 @@
 (defmacro! timed (it)
 	`(timeit (fn* () ,it)))
 
-(defun! _do_map (fun it acc)
-	(if (empty? it)
-		(rev acc)
-		(_do_map 
-			fun 
-			(cdr it) 
-			(cons (fun (car it)) 
-			acc))))
-
-(defun! map (fun it)
-	(_do_map fun it ()))
+(defun! map (f over (acc '()))
+  (if (empty? over)
+    (rev acc)
+    (map 
+      f 
+      :over (cdr over) 
+      :acc (cons (f (car over)) acc))))
 
 (defun! loadf-exported (path)
 	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
@@ -143,9 +139,6 @@
 
 (defmacro! set! (ident val)
 	`(do (del! ,ident) (val! ,ident ,val)))
-
-(defmacro! cut (&rest)
-	`(fn* (<>) ,rest))
 
 (defun! str:substr (s (from 0) (to (str:len s)))
 	(str:_substr s from to))

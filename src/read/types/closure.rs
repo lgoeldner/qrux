@@ -67,7 +67,7 @@ impl Closure {
 
         let insert = |it: EcoString, to| env.inner().data.borrow_mut().insert(it, to);
 
-        let (kws, rest) = split_kw_args(inp)?;
+        let (kws, rest_args) = split_kw_args(inp)?;
 
         // load keyword args
         for (kw, val) in kws {
@@ -81,32 +81,34 @@ impl Closure {
         }
 
         // load remaining args
-        let mut rest_iter = rest.iter();
+        let mut args = rest_args.iter();
         let mut rem_idents_iter = bound_idents
             .clone()
             .into_iter()
             .filter(|&(i, _)| i == IsBound::No)
             .map(|(_, a)| a);
 
-        loop {
+		// load the "normal" arguments and varargs
+		// if there are no more idents to bind to or there are varargs, `None` remaining args are returned.
+        let remaining_args = loop {
             let Some(ident) = rem_idents_iter.next() else {
-                break;
+                break Some(args);
             };
 
             // load varargs
             if ident.is_vararg() {
                 for a in rem_idents_iter.rev() {
-                    let ex = rest_iter.next_back().unwrap();
+                    let ex = args.next_back().unwrap();
                     insert(a.name(), ex.clone());
                 }
 
-                let rest = rest_iter.cloned().collect::<Cons>();
-                insert(EcoString::from("rest"), Expr::List(rest));
-                break;
+                let rest = args.cloned().collect::<Cons>();
+                insert(EcoString::from("rest"), dbg!(Expr::List(rest)));
+                break None;
             }
 
-            let Some(ex) = rest_iter.next() else {
-                break;
+            let Some(ex) = args.next() else {
+                break None;
             };
 
             bound_idents
@@ -116,22 +118,56 @@ impl Closure {
                 .0 = IsBound::Yes;
 
             insert(ident.name(), ex.clone());
+        };
+
+		// insert defaults
+        for (k, v) in bound_idents
+            .iter_mut()
+            .filter(|(i, _)| *i == IsBound::No)
+            .filter_map(|(i, a)| {
+                a.default().as_ref().map(|default| {
+                    *i = IsBound::Yes;
+                    (a.name(), default)
+                })
+            })
+        {
+            insert(k, r.eval(v.clone(), Some(env.clone()))?);
         }
 
-        // load the remaining default args
-        for (ident, default) in bound_idents
+		// check for missing args
+        if bound_idents
             .iter()
-            .filter(|(i, _)| *i == IsBound::No)
-            .filter_map(|(_, a)| a.default().as_ref().map(|default| (a.name(), default)))
+            .any(|(i, a)| !a.is_vararg() && *i == IsBound::No)
         {
-            insert(ident, r.eval(default.clone(), Some(env.clone()))?);
+            let unbound_args = bound_idents
+                .iter()
+                .filter(|&(i, a)| !a.is_vararg() && *i == IsBound::No)
+                .map(|(_, a)| Expr::Sym(a.name()))
+                .collect::<Cons>();
+
+            return Err(QxErr::Any(anyhow::anyhow!(
+                "ArgsErr: Missing args: {}",
+                unbound_args
+            )));
+        }
+
+		// check for leftover args
+        if let Some(mut i) = remaining_args.map(Iterator::peekable) {
+            if i.peek().is_some() {
+                return Err(QxErr::Any(anyhow::anyhow!(
+                    "ArgsErr: Too many args: {}",
+                    i.cloned().collect::<Cons>()
+                )));
+            }
         }
 
         Ok(env)
     }
 }
 
-fn split_kw_args(args: Cons) -> QxResult<(Vec<(Keyword, Expr)>, Vec<Expr>)> {
+type KWArgs = Vec<(Keyword, Expr)>;
+
+fn split_kw_args(args: Cons) -> QxResult<(KWArgs, Vec<Expr>)> {
     let mut args_iter = args.iter();
     let mut kws = vec![];
     let mut rest = vec![];

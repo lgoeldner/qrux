@@ -1,9 +1,22 @@
 use ecow::EcoString;
 use tap::Pipe;
 
-use super::{Cons, Expr, ExprType, QxErr, QxResult};
+use super::{Atom, Cons, Expr, ExprType, QxErr, QxResult};
 
 impl Expr {
+	// pub fn 
+
+    pub fn to_atom(&self) -> QxResult<Atom> {
+        match self {
+            Expr::Atom(a) => Ok(a.clone()),
+            _ => Err(QxErr::TypeConvValErr {
+                from: self.get_type(),
+                val: self.clone(),
+                to: ExprType::Atom,
+            }),
+        }
+    }
+
     pub fn to_list(&self) -> QxResult<Cons> {
         match self {
             Expr::List(l) => Ok(l.clone()),
@@ -33,6 +46,7 @@ impl Expr {
                 },
                 Ok,
             ),
+            Expr::List(l) => Ok(l.0.is_some()),
 
             _ => Err(QxErr::TypeConvValErr {
                 from: self.get_type(),
