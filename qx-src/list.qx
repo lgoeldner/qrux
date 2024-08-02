@@ -9,12 +9,12 @@
 		(skip (cdr lst) (- n 1))))
 
 (defun! fold (init f over)
-	(if (empty? over)
-		init
-		(fold 
-			(f init (car over))
-			f
-			(cdr over))))
+  (loop (acc init over over)
+    (if (empty? over)
+      acc
+      (recur 
+        (f acc (car over))
+        (cdr over)))))
 
 (defun! reduce (f over)
 	(fold (car over) f (cdr over)))

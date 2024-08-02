@@ -1,15 +1,21 @@
-use anyhow::anyhow;
-use ecow::EcoString;
-use special_form_code::SpecialForm;
-use std::{ops::ControlFlow, rc::Rc};
-use tap::prelude::*;
-
 use crate::{
     env::Env,
     expr,
-    read::{cons, types::closure::Closure, Cons, Expr, ExprType, QxErr},
+    read::{cons, types::closure::Closure, Cons, ConsIter, Expr, ExprType, QxErr, QxResult},
     special_form, Func, Runtime,
 };
+
+use anyhow::anyhow;
+use ecow::EcoString;
+use special_form_code::SpecialForm;
+use std::rc::Rc;
+use tap::prelude::*;
+
+enum ControlFlow {
+    Break(QxResult<Expr>),
+    Continue(EvalTco),
+    // Recur { env: Env },
+}
 
 #[derive(Clone, Copy, Debug)]
 pub enum Shadow {
@@ -93,9 +99,7 @@ impl Runtime {
                 }
 
                 Expr::MapLit(m) => {
-                    let mut eval = m
-                        .iter()
-                        .map(move |it| self.eval(it.clone(), env.clone()));
+                    let mut eval = m.iter().map(move |it| self.eval(it.clone(), env.clone()));
 
                     let mut map = im::HashMap::new();
 
@@ -110,12 +114,46 @@ impl Runtime {
         }
     }
 
-    fn apply(
-        &mut self,
-        ident: &Expr,
-        lst: Cons,
-        env: Option<Env>,
-    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+    fn eval_loop(&mut self, args: Cons, env: Option<Env>) -> ControlFlow {
+        let env = Env::with_outer(env.unwrap_or_else(|| self.env.clone()));
+        let vars = early_ret!(
+            args
+            .car()
+            .ok_or_else(|| QxErr::NoArgs(Some(args.clone()), "loop"))
+            .and_then(|it| it.to_list())
+        );
+
+        let mut names = vec![];
+
+        for [name, arg] in vars.pair_iter() {
+            let name = early_ret!(name.as_strt(ExprType::Sym));
+            names.push(name.clone());
+
+            self.defenv(&name, &arg, Some(env.clone()), Shadow::Yes)
+                .unwrap();
+        }
+
+        let body = args.cdr().car().unwrap();
+
+        loop {
+            match self.eval(body.clone(), Some(env.clone())) {
+                Err(QxErr::Recur(new)) => {
+                    for (arg, name) in new.into_iter().zip(&names) {
+                        self.defenv(name, &arg, Some(env.clone()), Shadow::Yes)
+                            .unwrap();
+                    }
+                }
+
+                res => return ControlFlow::Break(res),
+            }
+        }
+    }
+
+    fn eval_recur(&mut self, args: Cons) -> ControlFlow {
+        ControlFlow::Break(Err(QxErr::Recur(args)))
+    }
+
+    fn apply(&mut self, ident: &Expr, lst: Cons, env: Option<Env>) -> ControlFlow {
         let xs = lst.cdr();
         let args = xs.into_iter();
 
@@ -128,6 +166,8 @@ impl Runtime {
         };
 
         match opcode {
+            SpecialForm::Loop => self.eval_loop(xs, env),
+            SpecialForm::Recur => self.eval_recur(xs),
             SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
                 [Expr::Sym(ident), expr] => {
@@ -213,7 +253,7 @@ impl Runtime {
                 let mut peekable = args.peekable();
 
                 if peekable.peek().is_none() {
-                    err!(form: "(do <expr>*)");
+                    return ControlFlow::Break(Ok(Expr::Nil));
                 }
 
                 // evaluate until the last expr, breaking it from the loop
@@ -234,12 +274,7 @@ impl Runtime {
         }
     }
 
-    fn eval_trycatch(
-        &mut self,
-        try_expr: &Expr,
-        env: &Option<Env>,
-        catch: &Cons,
-    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+    fn eval_trycatch(&mut self, try_expr: &Expr, env: &Option<Env>, catch: &Cons) -> ControlFlow {
         // check that the catch expression is valid
         let mut c_iter = catch.into_iter();
         if !matches!(c_iter.next(), Some(Expr::Sym(catch)) if &*catch == "catch*") {
@@ -288,12 +323,7 @@ impl Runtime {
         }
     }
 
-    fn eval_let(
-        &mut self,
-        env: &Option<Env>,
-        new_bindings: Cons,
-        to_eval: &Expr,
-    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+    fn eval_let(&mut self, env: &Option<Env>, new_bindings: Cons, to_eval: &Expr) -> ControlFlow {
         // create new env, set as current, old env is now self.env.outer
 
         let env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
@@ -322,7 +352,7 @@ impl Runtime {
         env: Option<Env>,
         cond: &Expr,
         then: &Expr,
-    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+    ) -> ControlFlow {
         let cond = early_ret!(self.eval(cond.clone(), env.clone()));
 
         match cond {
@@ -343,7 +373,7 @@ impl Runtime {
         args: Cons,
         body: &Expr,
         is_macro: bool,
-    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+    ) -> ControlFlow {
         let env = env.as_ref().unwrap_or(&self.env).clone();
 
         let cl = Closure::new(args, body.clone(), env, is_macro);
@@ -351,11 +381,7 @@ impl Runtime {
         break_ok!(Expr::Closure(Rc::new(early_ret!(cl))))
     }
 
-    fn apply_func(
-        &mut self,
-        ast: Expr,
-        env: Option<Env>,
-    ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
+    fn apply_func(&mut self, ast: Expr, env: Option<Env>) -> ControlFlow {
         let new = match self.replace_eval(ast, env.clone()) {
             Ok(Expr::List(new)) => new,
             Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
@@ -508,60 +534,7 @@ fn quasiquote(ast: &Expr) -> Result<Expr, QxErr> {
 
             qq_list(v)
         }
-        _ => Ok({
-            //expr!(cons expr!(sym "quote"), ast.clone());
-            cons(expr!(sym "quote"), Cons::new(ast.clone())).pipe(Expr::List)
-        }),
-    }
-}
-
-// BUG: splice-unquote is not working
-fn _qq_list_new(ast: &Cons) -> Result<Cons, QxErr> {
-    let mut y = Vec::new();
-    for item in ast {
-        match item {
-            Expr::List(ref c) if c.len_is(2) => {
-                if let Expr::Sym(ref s) = c.car().unwrap() {
-                    if &**s == "splice-unquote" {
-                        eprintln!("{{c: {c:?}, curr: {y:?}}}");
-                        let Some(Expr::List(l)) = c.cdr().car() else {
-                            return Err(QxErr::NoArgs(c.clone().into(), "splice-unquote"));
-                        };
-
-                        y.extend(_qq_list_new(&l)?.into_iter());
-                    }
-                }
-            }
-
-            _ => y.push(_new_quasiquote(item)?),
-        }
-    }
-
-    ast.iter()
-        .map(_new_quasiquote)
-        .collect::<Result<Cons, _>>()
-        .map(|it| cons(expr!(sym "list"), it))
-}
-
-fn _new_quasiquote(ast: Expr) -> Result<Expr, QxErr> {
-    match ast {
-        Expr::List(ref c) => {
-            if c.len_is(2) {
-                if let Expr::Sym(ref s) = c.car().unwrap() {
-                    match &**s {
-                        "unquote" => {
-                            return Ok(c.cdr().car().unwrap());
-                        }
-                        "splice-unquote" => eprintln!("{c:?}"),
-                        _ => {}
-                    }
-                }
-            }
-
-            _qq_list_new(c).map(Expr::List)
-        }
-
-        _ => Ok(expr!(cons expr!(sym "quote"), ast)),
+        _ => Ok(cons(expr!(sym "quote"), Cons::new(ast.clone())).pipe(Expr::List)),
     }
 }
 
@@ -573,6 +546,8 @@ mod special_form_code {
     use tap::Pipe;
 
     pub enum SpecialForm {
+        Loop,
+        Recur,
         Val,
         Del,
         Defmacro,
@@ -592,6 +567,8 @@ mod special_form_code {
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             match s {
+                "loop" => Self::Loop,
+                "recur" => Self::Recur,
                 "val!" => Self::Val,
                 "del!" => Self::Del,
                 "defmacro!" => Self::Defmacro,

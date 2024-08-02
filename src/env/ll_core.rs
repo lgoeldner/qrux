@@ -156,6 +156,8 @@ pub fn core_func_names() -> Vec<&'static str> {
         "try*",
         "catch*",
         "reflect:defsym",
+        "loop",
+        "recur",
     ]
 }
 

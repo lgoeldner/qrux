@@ -1,4 +1,4 @@
-use crate::Func;
+use crate::{env::Env, Func};
 use ecow::EcoString;
 use im::HashMap;
 use kw::Keyword;
@@ -59,6 +59,9 @@ use colored::Colorize;
 
 #[derive(Error, Debug)]
 pub enum QxErr {
+    #[error("RecurErr: Missing Loop, Args: {0}")]
+    Recur(Cons),
+
     #[error("Interrupted, Stop")]
     Stop,
     #[error("FatalErr: {0:#}")]
