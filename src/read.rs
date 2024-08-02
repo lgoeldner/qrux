@@ -1,5 +1,5 @@
 use ecow::EcoString;
-use tap::{Conv, Pipe, Tap};
+use tap::{Conv, Pipe};
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -191,7 +191,7 @@ impl TokenStream<'_> {
         .pipe(Ok)
     }
 
-    fn parse_list(&mut self, [open, close]: [&str; 2]) -> Result<Vec<Expr>, QxErr> {
+    fn parse_list(&mut self, [_, close]: [&str; 2]) -> Result<Vec<Expr>, QxErr> {
         let mut list = Vec::new();
 
         loop {

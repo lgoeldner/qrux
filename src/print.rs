@@ -17,7 +17,7 @@ impl std::fmt::Display for Cons {
 
         self.0
             .as_ref()
-            .map(|it| write_cons_inner(f, &it))
+            .map(|it| write_cons_inner(f, it))
             .transpose()?;
 
         write!(f, ")")

@@ -32,7 +32,7 @@ impl Expr {
 
     pub fn as_kw(&self) -> QxResult<kw::Keyword> {
         match self {
-            Expr::Keyword(k) => Ok(k.clone()),
+            Expr::Keyword(k) => Ok(*k),
             Expr::Atom(a) => a.borrow().as_kw(),
             Expr::String(s) | Expr::Sym(s) => Ok(kw::Keyword::new(s.clone())),
             _ => Err(QxErr::TypeConvValErr {

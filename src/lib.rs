@@ -4,16 +4,14 @@
     clippy::missing_panics_doc,
     clippy::must_use_candidate,
     clippy::use_self,
-	clippy::option_if_let_else,
+    clippy::option_if_let_else,
+    clippy::similar_names
 )]
-// #![feature(try_trait_v2)]
 
-use std::path::PathBuf;
-
-use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
-
-use env::{Env, Inner};
+use env::Env;
 use read::{Cons, Expr, QxResult};
+use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
+use std::path::PathBuf;
 use tap::Pipe;
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;

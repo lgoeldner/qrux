@@ -55,7 +55,7 @@ impl TryFrom<Expr> for Arg {
                 (false, it)
             }
         };
-        
+
         match &value {
         Expr::List(ref cons) if cons.len_is(2) => 'err: {
 				let Some(Expr::Sym(sym)) = cons.car() else {

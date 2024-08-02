@@ -192,9 +192,33 @@ fn int_ops(ident: &str) -> Option<Expr> {
 
 static FIRST_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
 
+fn insert_into_map(map: im::HashMap<Keyword, Expr>, args: Cons) -> QxResult<Expr> {
+    let mut m = map;
+
+    for [k, v] in args.pair_iter() {
+        m = m.update(k.as_kw()?, v);
+    }
+
+    Ok(Expr::Map(m))
+}
+
 fn list_builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident {
+            "into", [] args @ .. => {
+                let coll = args.car().ok_or_else(|| QxErr::NoArgs(None, "into"))?;
+                match coll {
+                    Expr::Map(m) => insert_into_map(m, args.cdr())?,
+                    _ => Expr::List(
+                        args
+                            .cdr()
+							.reversed()
+                            .into_iter()
+                            .fold(coll.to_list()?, flip(cons))
+                    ),
+                }
+            },
+
             "concat", [] lists @ .. => {
                 lists.into_iter()
                 .map(|it| match it {
@@ -206,7 +230,9 @@ fn list_builtins(ident: &str) -> Option<Expr> {
             },
 
             "rev", [it] => Expr::List(it.to_list()?.reversed()),
-            "cons", [el, lst] => Expr::List(cons(el, lst.to_list()?)),
+            "cons", [el, lst] => {
+                Expr::List(cons(el, lst.to_list()?))
+            },
             "car", [lst] => lst.to_list()?.car().unwrap_or(Expr::Nil),
             "cdr", [lst] => Expr::List(lst.to_list()?.cdr()),
             "list", [] rest @ .. => Expr::List(rest),
@@ -221,6 +247,14 @@ fn list_builtins(ident: &str) -> Option<Expr> {
                  .nth(i.to_int()?.pipe(as_usize)?)
                  .ok_or(QxErr::NoArgs(None, "nth"))?
             },
+        }
+    }
+}
+
+fn map_builtins(ident: &str) -> Option<Expr> {
+    funcmatch! {
+        match ident {
+
         }
     }
 }

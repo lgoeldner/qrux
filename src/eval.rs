@@ -74,7 +74,7 @@ impl Runtime {
             break match ast {
                 Expr::List(Cons(None)) => Ok(ast),
 
-                Expr::List(ref list @ Cons(Some(_))) => {
+                Expr::List(ref list) => {
                     let ident = &list.car().unwrap();
 
                     match self.apply(ident, list.clone(), env.clone()) {
@@ -157,7 +157,7 @@ impl Runtime {
             SpecialForm::Try => special_form! {
                 args, "(try* <expr> (catch* <sym> <expr>)";
                 [try_expr, Expr::List(catch)] => {
-                    self.eval_trycatch(&try_expr, &env, catch)
+                    self.eval_trycatch(&try_expr, &env, &catch)
                 }
             },
 
@@ -168,7 +168,7 @@ impl Runtime {
 
             SpecialForm::If => special_form! {
                 args, "(if <condition> <then> <else>)";
-                [cond, then] ..xs => self.eval_if(xs, env, &cond, &then)
+                [cond, then] ..xs => self.eval_if(&xs, env, &cond, &then)
             },
 
             SpecialForm::Let => special_form! {
@@ -225,7 +225,7 @@ impl Runtime {
         &mut self,
         try_expr: &Expr,
         env: &Option<Env>,
-        catch: Cons,
+        catch: &Cons,
     ) -> ControlFlow<Result<Expr, QxErr>, EvalTco> {
         // check that the catch expression is valid
         let mut c_iter = catch.into_iter();
@@ -305,7 +305,7 @@ impl Runtime {
 
     fn eval_if(
         &mut self,
-        otherwise: Cons,
+        otherwise: &Cons,
         env: Option<Env>,
         cond: &Expr,
         then: &Expr,
@@ -357,8 +357,16 @@ impl Runtime {
                 env: Some(early_ret!(cl.create_env(new.cdr(), self))),
             }),
 
+            Some(Expr::Keyword(k)) => {
+                let Some(Expr::Map(m)) = new.cdr().car() else {
+                    return err!(break "Not a Map: {new:?}");
+                };
+
+                ControlFlow::Break(m.get(&k).map_or_else(|| Expr::Nil, Clone::clone).pipe(Ok))
+            }
+
             Some(err) => err!(break "Not a Function: {err:?}"),
-            // None => err!(break QxErr::NoArgs(None, "function application")),
+
             None => unreachable!(),
         }
     }
