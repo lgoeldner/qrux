@@ -15,7 +15,7 @@ pub mod expr_macro;
 pub mod types;
 
 static RE: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\]|"(?:\\.|[^\\"])*"?|;.*|,|[^\s\[\]{}('"`,;)]*)"#)
+    Regex::new(r#"[\s]*((!!)|~@|[\[\]{}()'`~^@\\#,]|"(?:\\.|[^\\"])*"?|;.*|[^\s\[\]{}('"`,;)]*)"#)
         .unwrap()
 });
 
@@ -59,7 +59,7 @@ pub(crate) fn from_string(s: EcoString) -> QxResult<Expr> {
 impl TryFrom<TokenStream<'_>> for Expr {
     type Error = QxErr;
     fn try_from(value: TokenStream<'_>) -> Result<Self, Self::Error> {
-        parse(value)
+        value.parse()
     }
 }
 
@@ -71,96 +71,113 @@ impl core::str::FromStr for Expr {
     }
 }
 
-fn parse(mut tokens: TokenStream) -> Result<Expr, QxErr> {
-    parse_atom(&mut tokens).and_then(|it| {
-        if tokens.is_eof() {
-            Ok(it)
-        } else {
-            Err(QxErr::MismatchedParen(ParenType::Open))
-        }
-    })
-}
-
-fn parse_atom(stream: &mut TokenStream) -> Result<Expr, QxErr> {
-    let raw_token = stream.next().context("Didnt expect EOF")?;
-
-    Ok(match raw_token {
-        "(" => parse_list(stream)?,
-        // if this is encountered, it's a syntax error,
-        // because it should be consumed in `parse_list`
-        ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
-
-        // reader macros //
-        "'" => expr!(cons expr!(quote), parse_atom(stream)?),
-        "@" => expr!(cons expr!(deref), parse_atom(stream)?),
-        "!!" => expr!(cons expr!(atom), parse_atom(stream)?),
-
-        // quasiquoting
-        "`" => expr!(cons expr!(quasiquote), parse_atom(stream)?),
-        "~" => expr!(cons expr!(sym "splice-unquote"), parse_atom(stream)?),
-        "," => expr!(cons expr!(unquote), parse_atom(stream)?),
-        //--//
-        "nil" => Expr::Nil,
-        "true" => expr!(bool true),
-        "false" => expr!(bool false),
-
-        int if int.parse::<i64>().is_ok() => {
-            Expr::Int(
-                // SAFETY: already checked if it can parse into an int
-                unsafe { int.parse::<i64>().unwrap_unchecked() },
-            )
-        }
-
-        string if string.starts_with('"') => {
-            if string.len() == 1 || !string.ends_with('"') {
-                return Err(QxErr::MissingToken(anyhow!("Second String delimiter")));
+impl TokenStream<'_> {
+    fn parse(mut self) -> Result<Expr, QxErr> {
+        self.parse_atom().and_then(|it| {
+            if self.is_eof() {
+                Ok(it)
+            } else {
+                Err(QxErr::MismatchedParen(ParenType::Open))
             }
-
-            Expr::String(
-                unescaper::unescape(&string[1..string.len() - 1])
-                    .map_err(|err| {
-                        QxErr::Any(anyhow!("Failed to unescape string: {string:?}, Err: {err}"))
-                    })?
-                    .into(),
-            )
-        }
-
-        kw if kw.starts_with(':') => expr!(kw kw),
-        sym => expr!(sym sym),
-    })
-}
-
-fn parse_list(stream: &mut TokenStream) -> Result<Expr, QxErr> {
-    let mut list = Vec::new();
-
-    loop {
-        if stream.peek() == Some(")") {
-            stream.next();
-            break;
-        }
-
-        // infix operator, swaps the order of the last and next expressions
-        // expressions to allow things like (10 \+ 10)
-        if stream.peek() == Some(r"\") {
-            stream.next();
-            let op = parse_atom(stream)?;
-
-            list.push(op);
-
-            let len = list.len();
-
-            if len < 2 {
-                return Err(QxErr::Any(anyhow!("Invalid infix operator use!")));
-            }
-
-            list.swap(len - 1, len - 2);
-
-            continue;
-        }
-
-        list.push(parse_atom(stream)?);
+        })
     }
 
-    // Ok(Expr::List(list.into()))
-    Ok(Expr::List(list.into()))
+    fn parse_atom(&mut self) -> Result<Expr, QxErr> {
+        let raw_token = self.next().context("Didnt expect EOF")?;
+
+        Ok(match raw_token {
+            "(" => self.parse_list()?,
+            // if this is encountered, it's a syntax error,
+            // because it should be consumed in `parse_list`
+            ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
+
+            // reader macros //
+            "'" => expr!(cons expr!(quote), self.parse_atom()?),
+            "@" => expr!(cons expr!(deref), self.parse_atom()?),
+            "!!" => expr!(cons expr!(atom), self.parse_atom()?),
+
+            "#" => {
+                let next = self.parse_list()?;
+                // .map_err(|_| QxErr::MissingToken(anyhow!("List for Anonymous Function")))?;
+
+                // (fn* (% ($ :nodef)) <body>)
+                expr![cons
+                    expr!(sym "fn*"),
+                    expr![cons
+                        expr!(sym "%"),
+                        expr![cons expr!(sym "$"),expr!(kw "nodef")]
+                    ],
+                    next
+                ]
+            }
+
+            // quasiquoting
+            "`" => expr!(cons expr!(quasiquote), self.parse_atom()?),
+            "~" => expr!(cons expr!(sym "splice-unquote"), self.parse_atom()?),
+            "," => expr!(cons expr!(unquote), self.parse_atom()?),
+            //--//
+            "nil" => Expr::Nil,
+            "true" => expr!(bool true),
+            "false" => expr!(bool false),
+
+            int if int.parse::<i64>().is_ok() => {
+                Expr::Int(
+                    // SAFETY: already checked if it can parse into an int
+                    unsafe { int.parse::<i64>().unwrap_unchecked() },
+                )
+            }
+
+            string if string.starts_with('"') => {
+                if string.len() == 1 || !string.ends_with('"') {
+                    return Err(QxErr::MissingToken(anyhow!("Second String delimiter")));
+                }
+
+                Expr::String(
+                    unescaper::unescape(&string[1..string.len() - 1])
+                        .map_err(|err| {
+                            QxErr::Any(anyhow!("Failed to unescape string: {string:?}, Err: {err}"))
+                        })?
+                        .into(),
+                )
+            }
+
+            kw if kw.starts_with(':') => expr!(kw kw),
+            sym => expr!(sym sym),
+        })
+    }
+
+    fn parse_list(&mut self) -> Result<Expr, QxErr> {
+        let mut list = Vec::new();
+
+        loop {
+            if self.peek() == Some(")") {
+                self.next();
+                break;
+            }
+
+            // infix operator, swaps the order of the last and next expressions
+            // expressions to allow things like (10 \+ 10)
+            if self.peek() == Some(r"\") {
+                self.next();
+                let op = self.parse_atom()?;
+
+                list.push(op);
+
+                let len = list.len();
+
+                if len < 2 {
+                    return Err(QxErr::Any(anyhow!("Invalid infix operator use!")));
+                }
+
+                list.swap(len - 1, len - 2);
+
+                continue;
+            }
+
+            list.push(self.parse_atom()?);
+        }
+
+        // Ok(Expr::List(list.into()))
+        Ok(Expr::List(list.into()))
+    }
 }
