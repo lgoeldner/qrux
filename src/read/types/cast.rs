@@ -4,8 +4,6 @@ use tap::Pipe;
 use super::{kw, Atom, Cons, Expr, ExprType, QxErr, QxResult};
 
 impl Expr {
-    // pub fn
-
     pub fn to_atom(&self) -> QxResult<Atom> {
         match self {
             Expr::Atom(a) => Ok(a.clone()),

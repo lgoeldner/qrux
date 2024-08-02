@@ -28,6 +28,7 @@ pub enum Expr {
     List(Cons),
     Keyword(kw::Keyword),
     Map(HashMap<Keyword, Expr>),
+    MapLit(Rc<[Expr]>),
     #[default]
     Nil,
 }
@@ -325,7 +326,7 @@ impl Expr {
             Self::Atom(_) => ExprType::Atom,
             Self::Closure(_) => ExprType::Closure,
             Self::Func(_) => ExprType::Func,
-            Self::Map(_) => ExprType::Map,
+            Self::Map(_) | Self::MapLit(_) => ExprType::Map,
             Self::Keyword(_) => ExprType::Keyword,
         }
     }

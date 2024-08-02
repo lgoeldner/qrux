@@ -101,6 +101,7 @@ pub fn core_func_names() -> Vec<&'static str> {
         ">=",
         "<=",
         "concat",
+        "into",
         "rev",
         "cons",
         "car",
@@ -212,7 +213,7 @@ fn list_builtins(ident: &str) -> Option<Expr> {
                     _ => Expr::List(
                         args
                             .cdr()
-							.reversed()
+                            .reversed()
                             .into_iter()
                             .fold(coll.to_list()?, flip(cons))
                     ),
@@ -273,7 +274,8 @@ fn env_to_expr(env: &Env) -> Expr {
         Cons::from(&[Cons::from(&[expr!(kw ":outer"), outer_env_expr]).pipe(Expr::List)])
     });
 
-    env.data()
+
+    env.vals()
         .borrow()
         .iter()
         .map(|(k, v)| expr!(cons Expr::Sym(k.clone()), v.clone()))
@@ -386,7 +388,7 @@ fn builtins(ident: &str) -> Option<Expr> {
 
             // get all defined symbols
             "reflect:defsym", [], env:env => {
-                let y = env.data().borrow();
+                let y = env.vals().borrow();
                 y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::List)
             },
         }
@@ -396,7 +398,7 @@ fn builtins(ident: &str) -> Option<Expr> {
 fn str_builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident {
-            "str:len", [Expr::String(s)] => Expr::Int(s.len().try_into().unwrap_or(0)),
+            "str:len", [s] => Expr::Int(s.as_strt(Type::String)?.len().pipe(as_i64)?),
             "str:at", [Expr::String(s), Expr::Int(i)] => {
                 Expr::String(
                     s
@@ -407,9 +409,10 @@ fn str_builtins(ident: &str) -> Option<Expr> {
                 )
             },
 
-            "str:_substr", [Expr::String(string), Expr::Int(from), Expr::Int(to)] => {
+            "str:_substr", [string, Expr::Int(from), Expr::Int(to)] => {
                 Expr::String(
                     string
+                        .as_strt(Type::String)?
                         .get(as_usize(from)?..as_usize(to)?)
                         .ok_or_else(|| anyhow!("str:_substr: index out of bounds"))?
                         .into()
@@ -470,6 +473,7 @@ fn typeconvert(ident: &str) -> Option<Expr> {
         "sym?" => func! {"sym?"; [it] => Expr::Bool(matches!(it, Expr::Sym(_))) },
         "key?" => func! { "key?"; [it] => Expr::Bool(matches!(it, Expr::Keyword(_))) },
         "list?" => func! {"list?"; [it] => Expr::Bool(matches!(it, Expr::List(_))) },
+        "fn?" => func! {"fn?"; [it] => Expr::Bool(matches!(it, Expr::Closure(_) | Expr::Func(_)))},
 
         _ => None::<Expr>?,
     }

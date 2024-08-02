@@ -99,21 +99,16 @@ impl TokenStream<'_> {
                     Err(anyhow!("Map must have an even number of elements!"))?;
                 }
 
-                let mut map = im::HashMap::new();
-
-                for chunk in lst.chunks_exact(2) {
-                    let key = chunk[0].clone().as_kw()?;
-                    let val = chunk[1].clone();
-                    map.insert(key, val);
-                }
-
-                Expr::Map(map)
+                Expr::MapLit(lst.into())
             }
 
             // reader macros //
             "'" => expr!(cons expr!(quote), self.parse_atom()?),
             "@" => expr!(cons expr!(deref), self.parse_atom()?),
             "!!" => expr!(cons expr!(atom), self.parse_atom()?),
+            
+            // anonymous function short form
+            // with implicit arity and numbered argument names
             "#" => {
                 /// find the maximum numbered implicit arg in a Sym
                 /// %100 => `Some(100)`
@@ -121,6 +116,7 @@ impl TokenStream<'_> {
                     match e {
                         Expr::List(l) => l.iter().filter_map(|it| flat_find_max(&it)).max(),
                         Expr::Sym(s) if s == "%" => Some(0),
+                        Expr::MapLit(l) => l.iter().filter_map(flat_find_max).max(),
                         Expr::Sym(s) if s.starts_with('%') => match s[1..].parse().ok() {
                             Some(0) => None,
                             el => el,
@@ -133,6 +129,7 @@ impl TokenStream<'_> {
                     match max {
                         None => Cons::nil(),
                         Some(max) => (1..=max)
+                            .rev()
                             .fold(Cons::nil(), |acc, i| {
                                 cons(expr!(sym format!("%{}", i)), acc)
                             })

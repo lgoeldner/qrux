@@ -1,8 +1,11 @@
 use core::fmt;
-use std::rc::Rc;
+use std::{fmt::Display, rc::Rc};
 
 use crate::{
-    read::{kw, Closure, Cons, ConsCell, Expr},
+    read::{
+        kw::{self, Keyword},
+        Closure, Cons, ConsCell, Expr,
+    },
     Func,
 };
 use colored::Colorize;
@@ -56,7 +59,10 @@ fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result 
     }
 }
 
-fn write_map(f: &mut fmt::Formatter, map: &im::HashMap<kw::Keyword, Expr>) -> fmt::Result {
+fn write_map<'a>(
+    f: &mut fmt::Formatter,
+    map: impl IntoIterator<Item = (impl Display, &'a Expr)>,
+) -> fmt::Result {
     if f.alternate() {
         write!(f, "{{")?;
     } else {
@@ -91,6 +97,7 @@ impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if f.alternate() {
             match self {
+                Self::MapLit(l) => writeln!(f, "MapLit{{{l:?}}}"),
                 Self::Atom(it) => format!("{:#}", it.borrow()).fmt(f),
                 Self::Int(int) => int.to_string().fmt(f),
                 Self::Sym(sym) => write!(f, "{sym}"),
@@ -111,6 +118,7 @@ impl std::fmt::Display for Expr {
             }
         } else {
             match self {
+                Self::MapLit(l) => write_map(f, l.chunks_exact(2).map(|it| (&it[0], &it[1]))),
                 Self::Atom(it) => format!("<Atom ({})>", it.borrow()).fmt(f),
                 Self::Int(int) => int.to_string().cyan().fmt(f),
                 Self::Sym(sym) => sym.to_string().red().fmt(f),

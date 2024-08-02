@@ -1,51 +1,19 @@
-(prn "1")
+; 2019 day 1
 
-(val! start (time))
+(val! inp (slurp "input.txt"))
 
-(defun! max (a b)
-	(if (> a b) a b))
+(defun! get-fuel (it)
+  (- (/ it 3) 2))
 
-(defun! list:max (list)
-	(_do_max list 0))
+(defun! total-fuel (mass (total 0))
+  (let ((fuel (get-fuel mass)))
+    (if (fuel \<= 0)
+      total
+      (total-fuel fuel (+ total fuel)))))
 
-(defun! _do_max (list rm)
-	(if (empty? list)
-		rm
-		(_do_max
-			(cdr list)
-			(max rm (int (car list))))))
+(export! '(total-fuel))
 
-(defun! max3 (lst (r1 !!0) (r2 !!0) (r3 !!0))
-	(if (empty? lst)
-		(map deref (list r1 r2 r3))
-		(do
-			(val! m (int (car lst)))
-
-			(cond
-				((> m @r1) (do (reset! r3 @r2) (reset! r2 @r1) (reset! r1 m)))
-				((> m @r2) (do (reset! r3 @r2) (reset! r2 m)))
-				((> m @r3) (reset! r3 m)))
-
-			(max3 (cdr lst) r1 r2 r3))))
-
-(val! inp (slurp "inp.txt"))
-
-(val! chunks
-	(str:splitby inp "\n\n"))
-
-(val! sums
-	(map
-		(fn* (it)
-			(apply
-				'+
-				(map
-					int
-					(str:splitby it "\n")
-					)))
-		chunks))
-
-(dbg (max3 sums))
-(val! elapsed (- (time) start))
-
-(println (str elapsed "ms"))
-(bye)
+(-> inp
+    (str:splitby "\n")
+    (map :f total-fuel)
+    (reduce :f +))

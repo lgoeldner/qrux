@@ -60,12 +60,12 @@ impl Closure {
 
         let insert_kw = |it: Keyword, to| {
             env.inner()
-                .data
+                .vals
                 .borrow_mut()
                 .insert(it.inspect_inner(|it| EcoString::from(it)), to)
         };
 
-        let insert = |it: EcoString, to| env.inner().data.borrow_mut().insert(it, to);
+        let insert = |it: EcoString, to| env.inner().vals.borrow_mut().insert(it, to);
 
         let (kws, rest_args) = split_kw_args(inp)?;
 

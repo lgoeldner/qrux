@@ -1,28 +1,29 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-
 use crate::{
     eval::Shadow,
     read::{Expr, QxErr},
 };
 
-mod ll_core;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use ecow::EcoString;
+
 pub use ll_core::{core_func_names, core_map};
+mod ll_core;
 
 #[derive(Clone, Default)]
 pub struct Inner {
     pub(crate) outer: Option<Env>,
-    pub(crate) data: RefCell<HashMap<EcoString, Expr>>,
+    pub(crate) vals: RefCell<HashMap<EcoString, Expr>>,
 }
 
 impl std::fmt::Debug for Inner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Env::Inner")
             .field("outer", &self.outer)
-            .field("data", &self.data)
+            .field("data", &self.vals)
             .finish()
     }
 }
+
 #[derive(Clone, Default, Debug)]
 pub struct Env(Rc<Inner>);
 
@@ -31,7 +32,7 @@ impl Inner {
     pub fn new_env(outer: Option<Env>) -> Env {
         Env(Rc::new(Self {
             outer,
-            data: RefCell::default(),
+            vals: RefCell::default(),
         }))
     }
 
@@ -59,40 +60,44 @@ impl Env {
 
     #[allow(clippy::must_use_candidate)]
     pub fn remove(&self, ident: &str) -> Option<Expr> {
-        self.0.data.borrow_mut().remove(ident)
+        self.0.vals.borrow_mut().remove(ident)
     }
 
     #[must_use]
     pub fn get(&self, ident: &str) -> Option<Expr> {
         self.find(ident).map_or_else(
             || core_map(ident),
-            |env| env.0.data.borrow().get(ident).cloned(),
+            |env| env.0.vals.borrow().get(ident).cloned(),
         )
     }
 
     /// set to the environment, returns either `Expr::Nil` or a `ShadowError`
     pub fn set(&self, ident: EcoString, val: Expr, over: Shadow) -> Result<Expr, QxErr> {
         if &*ident != "_" {
-            if matches!(over, Shadow::No) && self.0.data.borrow_mut().contains_key(&ident) {
+            let is_noshadow = matches!(over, Shadow::No);
+            let already_contains_key = self.0.vals.borrow_mut().contains_key(&ident);
+            let is_closure = matches!(val, Expr::Closure(_));
+
+            if is_noshadow && already_contains_key && !is_closure {
                 eprintln!("{ident} already set");
                 return Err(QxErr::ShadowErr(ident));
             }
 
-            self.0.data.borrow_mut().insert(ident, val);
+            self.0.vals.borrow_mut().insert(ident, val);
         }
 
         Ok(Expr::Nil)
     }
 
-    pub fn data(&self) -> &RefCell<HashMap<EcoString, Expr>> {
-        &self.0.data
+    pub fn vals(&self) -> &RefCell<HashMap<EcoString, Expr>> {
+        &self.0.vals
     }
 
     #[must_use]
     pub fn find(&self, ident: &str) -> Option<Self> {
         // check if self contains the key,
         self.0
-            .data
+            .vals
             .borrow()
             .contains_key(ident)
             // then return self

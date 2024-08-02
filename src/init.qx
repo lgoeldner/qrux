@@ -157,6 +157,8 @@
 (defmacro! -> (start &rest)
   `(thread-list ,start ,rest))
 
+(loadf "qx-src/list.qx")
+
 (list:iter file :in *ARGS*
 		(println (str "loading file: " (car *ARGS*)))
 		(try* (loadf (car *ARGS*))

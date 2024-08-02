@@ -92,6 +92,19 @@ impl Runtime {
                     }
                 }
 
+                Expr::MapLit(m) => {
+                    let mut eval = m
+                        .iter()
+                        .map(move |it| self.eval(it.clone(), env.clone()));
+
+                    let mut map = im::HashMap::new();
+
+                    while let (Some(k), Some(v)) = (eval.next(), eval.next()) {
+                        map.insert(k?.as_kw()?, v?);
+                    }
+
+                    Ok(Expr::Map(map))
+                }
                 _ => self.replace_eval(ast, env),
             };
         }
