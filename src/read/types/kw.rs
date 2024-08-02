@@ -1,4 +1,5 @@
 use crate::lazy::Lazy;
+use colored::Colorize;
 use ecow::EcoString;
 use std::{
     collections::HashMap,
@@ -19,13 +20,28 @@ pub struct Table<K> {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Keyword(u64);
 
+impl Hash for Keyword {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0);
+    }
+}
+
 impl std::fmt::Display for Keyword {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            KW_TABLE.read().expect("Keyword Table is poisoned")[self]
-        )
+        let str = &KW_TABLE.read().expect("Keyword Table is poisoned")[self];
+        if f.alternate() {
+            write!(f, "{str}",)
+        } else {
+            write!(
+                f,
+                "{}",
+                str.color(colored::Color::TrueColor {
+                    r: 138,
+                    g: 206,
+                    b: 0,
+                })
+            )
+        }
     }
 }
 

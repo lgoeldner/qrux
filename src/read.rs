@@ -1,5 +1,5 @@
 use ecow::EcoString;
-use tap::{Pipe, Tap};
+use tap::{Conv, Pipe, Tap};
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -72,20 +72,6 @@ impl core::str::FromStr for Expr {
     }
 }
 
-fn gen_args(max: Option<u32>) -> Cons {
-    max.map_or_else(
-        || Cons::new(expr!(sym "%")),
-        |max| {
-            let mut l = Cons::nil();
-            for i in (1..=max).rev() {
-                l = cons(expr!(sym format!("%{}", i)), l);
-            }
-
-            cons(expr!(sym "%"), l)
-        },
-    )
-}
-
 impl TokenStream<'_> {
     fn parse(mut self) -> Result<Expr, QxErr> {
         self.parse_atom().and_then(|it| {
@@ -100,18 +86,37 @@ impl TokenStream<'_> {
     fn parse_atom(&mut self) -> Result<Expr, QxErr> {
         let raw_token = self.next().context("Didnt expect EOF")?;
 
-        Ok(match raw_token {
-            "(" => self.parse_list()?,
+        match raw_token {
+            "(" => self.parse_list(["(", ")"])?.conv::<Cons>().pipe(Expr::List),
             // if this is encountered, it's a syntax error,
             // because it should be consumed in `parse_list`
             ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
+
+            "{" => {
+                let lst = self.parse_list(["{", "}"])?;
+
+                if lst.len() % 2 != 0 {
+                    Err(anyhow!("Map must have an even number of elements!"))?;
+                }
+
+                let mut map = im::HashMap::new();
+
+                for chunk in lst.chunks_exact(2) {
+                    let key = chunk[0].clone().as_kw()?;
+                    let val = chunk[1].clone();
+                    map.insert(key, val);
+                }
+
+                Expr::Map(map)
+            }
 
             // reader macros //
             "'" => expr!(cons expr!(quote), self.parse_atom()?),
             "@" => expr!(cons expr!(deref), self.parse_atom()?),
             "!!" => expr!(cons expr!(atom), self.parse_atom()?),
-
             "#" => {
+                /// find the maximum numbered implicit arg in a Sym
+                /// %100 => `Some(100)`
                 fn flat_find_max(e: &Expr) -> Option<u32> {
                     match e {
                         Expr::List(l) => l.iter().filter_map(|it| flat_find_max(&it)).max(),
@@ -124,12 +129,22 @@ impl TokenStream<'_> {
                     }
                 }
 
+                fn gen_args(max: Option<u32>) -> Cons {
+                    match max {
+                        None => Cons::nil(),
+                        Some(max) => (1..=max)
+                            .fold(Cons::nil(), |acc, i| {
+                                cons(expr!(sym format!("%{}", i)), acc)
+                            })
+                            .pipe(|l| cons(expr!(sym "%"), l)),
+                    }
+                }
+
                 match self.next() {
                     Some("(") => {
-                        let next = self.parse_list()?;
+                        let next = self.parse_list(["(", ")"])?.conv::<Cons>().pipe(Expr::List);
                         let args = flat_find_max(&next).pipe(gen_args);
 
-                        // (fn* (% ($ :nodef)) <body>)
                         expr![cons
                             expr!(sym "fn*"),
                             Expr::List(args),
@@ -172,14 +187,15 @@ impl TokenStream<'_> {
 
             kw if kw.starts_with(':') => expr!(kw kw),
             sym => expr!(sym sym),
-        })
+        }
+        .pipe(Ok)
     }
 
-    fn parse_list(&mut self) -> Result<Expr, QxErr> {
+    fn parse_list(&mut self, [open, close]: [&str; 2]) -> Result<Vec<Expr>, QxErr> {
         let mut list = Vec::new();
 
         loop {
-            if self.peek() == Some(")") {
+            if self.peek() == Some(close) {
                 self.next();
                 break;
             }
@@ -206,7 +222,6 @@ impl TokenStream<'_> {
             list.push(self.parse_atom()?);
         }
 
-        // Ok(Expr::List(list.into()))
-        Ok(Expr::List(list.into()))
+        Ok(list)
     }
 }

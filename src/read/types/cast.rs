@@ -1,10 +1,10 @@
 use ecow::EcoString;
 use tap::Pipe;
 
-use super::{Atom, Cons, Expr, ExprType, QxErr, QxResult};
+use super::{kw, Atom, Cons, Expr, ExprType, QxErr, QxResult};
 
 impl Expr {
-	// pub fn 
+    // pub fn
 
     pub fn to_atom(&self) -> QxResult<Atom> {
         match self {
@@ -26,6 +26,19 @@ impl Expr {
                 from: self.get_type(),
                 val: self.clone(),
                 to: ExprType::List,
+            }),
+        }
+    }
+
+    pub fn as_kw(&self) -> QxResult<kw::Keyword> {
+        match self {
+            Expr::Keyword(k) => Ok(k.clone()),
+            Expr::Atom(a) => a.borrow().as_kw(),
+            Expr::String(s) | Expr::Sym(s) => Ok(kw::Keyword::new(s.clone())),
+            _ => Err(QxErr::TypeConvValErr {
+                from: self.get_type(),
+                val: self.clone(),
+                to: ExprType::Keyword,
             }),
         }
     }

@@ -1,17 +1,17 @@
-use std::{cell::RefCell, rc::Rc};
-
+use crate::Func;
 use ecow::EcoString;
+use im::HashMap;
+use kw::Keyword;
+use std::{cell::RefCell, rc::Rc};
 use thiserror::Error;
-
-use crate::{Func};
 
 pub type QxResult<T> = Result<T, QxErr>;
 
 pub mod closure;
 pub mod typing;
 pub use closure::Closure;
-pub mod kw;
 pub mod cast;
+pub mod kw;
 
 pub type Atom = Rc<RefCell<Expr>>;
 
@@ -27,10 +27,10 @@ pub enum Expr {
     Bool(bool),
     List(Cons),
     Keyword(kw::Keyword),
+    Map(HashMap<Keyword, Expr>),
     #[default]
     Nil,
 }
-
 
 #[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
 pub enum ExprType {
@@ -43,6 +43,7 @@ pub enum ExprType {
     Bool,
     List,
     Keyword,
+    Map,
     #[default]
     Nil,
 }
@@ -87,9 +88,13 @@ pub enum QxErr {
 
     #[error("TypeConvertErr from {from} to {to}")]
     TypeConvErr { from: ExprType, to: ExprType },
-    
+
     #[error("TypeConvertErr from {val} ({from}) to {to}")]
-    TypeConvValErr {from: ExprType, val: Expr, to: ExprType},
+    TypeConvValErr {
+        from: ExprType,
+        val: Expr,
+        to: ExprType,
+    },
 
     #[error("TypeParseErr from {from} to {to}: {err}")]
     TypeParseErr {
@@ -314,13 +319,13 @@ impl Expr {
             Self::Int(_) => ExprType::Int,
             Self::String(_) => ExprType::String,
             Self::Sym(_) => ExprType::Sym,
-            // Self::List(_) => ExprType::List,
             Self::Bool(_) => ExprType::Bool,
             Self::List(_) => ExprType::List,
             Self::Nil => ExprType::Nil,
             Self::Atom(_) => ExprType::Atom,
             Self::Closure(_) => ExprType::Closure,
             Self::Func(_) => ExprType::Func,
+            Self::Map(_) => ExprType::Map,
             Self::Keyword(_) => ExprType::Keyword,
         }
     }

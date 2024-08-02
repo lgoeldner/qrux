@@ -1,11 +1,14 @@
 use core::fmt;
 use std::rc::Rc;
 
-use crate::read::{Closure, Cons, ConsCell, Expr};
+use crate::{
+    read::{kw, Closure, Cons, ConsCell, Expr},
+    Func,
+};
 use colored::Colorize;
 
 pub fn pp_ast(ast: &Expr) {
-    println!("{ast:?}",);
+    println!(";; => {ast:?}",);
 }
 
 impl std::fmt::Display for Cons {
@@ -53,6 +56,37 @@ fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result 
     }
 }
 
+fn write_map(f: &mut fmt::Formatter, map: &im::HashMap<kw::Keyword, Expr>) -> fmt::Result {
+    if f.alternate() {
+        write!(f, "{{")?;
+    } else {
+        write!(f, "{}", "{".purple())?;
+    }
+
+    let mut iter = map.into_iter();
+    if let Some((k, v)) = iter.next() {
+        if f.alternate() {
+            writeln!(f, "\n  {k:#} {v:#}")?;
+        } else {
+            writeln!(f, "\n  {k} {v}")?;
+        }
+    }
+
+    for (k, v) in iter {
+        if f.alternate() {
+            writeln!(f, "  {k:#} {v:#}")?;
+        } else {
+            writeln!(f, "  {k} {v}")?;
+        }
+    }
+
+    if f.alternate() {
+        write!(f, "}}")
+    } else {
+        write!(f, "{}", "}".purple())
+    }
+}
+
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if f.alternate() {
@@ -73,6 +107,7 @@ impl std::fmt::Display for Expr {
                     write!(f, ")")
                 }
                 Self::Keyword(kw) => write!(f, "{kw}"),
+                Self::Map(map) => write_map(f, map),
             }
         } else {
             match self {
@@ -80,18 +115,17 @@ impl std::fmt::Display for Expr {
                 Self::Int(int) => int.to_string().cyan().fmt(f),
                 Self::Sym(sym) => sym.to_string().red().fmt(f),
                 Self::String(string) => format!(r#""{string}""#).bright_green().fmt(f),
-                // Self::List(list) => write_list(f, list),
                 Self::Nil => "nil".bold().blue().fmt(f),
-                Self::Func(_) => "<Func>".red().fmt(f),
+                Self::Func(Func(name, _)) => format!("<Func \"{name}\">").red().fmt(f),
                 Self::Closure(c) => c.to_string().red().fmt(f),
                 Self::Bool(b) => b.to_string().bright_blue().fmt(f),
                 Self::List(it) => it.fmt(f),
-                Self::Keyword(kw) => kw.to_string().green().fmt(f),
+                Self::Keyword(kw) => kw.fmt(f),
+                Self::Map(map) => write_map(f, map),
             }
         }
     }
 }
-
 
 impl fmt::Display for Closure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

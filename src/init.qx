@@ -17,9 +17,6 @@
 (defun! t= (a b)
     (= (typeof a) (typeof b)))
 
-(defmacro! cut (&rest)
-	`(fn* (<>) ,rest))
-
 (defmacro! and (lhs rhs)
 	`(if ,lhs
 		(if ,rhs

@@ -4,6 +4,7 @@
     clippy::missing_panics_doc,
     clippy::must_use_candidate,
     clippy::use_self,
+	clippy::option_if_let_else,
 )]
 // #![feature(try_trait_v2)]
 
