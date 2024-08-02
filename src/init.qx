@@ -79,11 +79,14 @@
 		(throw "Non-nil Assertion failed!")
 		it))
 
-(defun! todo (message)
-	(throw (str "Not yet implemented: " message)))
+(defun! todo ((message nil))
+  (throw (if message 
+         (str "Not yet implemented: " message) 
+         "Not yet implemented!")))
 
 (defmacro! cond (&rest)
-	(let*  (first (car rest)
+	(let*  
+	   (first (car rest)
 			condition (car first)
 			expr (nth 1 first)
 			next (cdr rest))
@@ -132,10 +135,8 @@
 (defun! loadf-exported (path)
 	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
 
-(defmacro! list:iter (ident in lst &rest)
-	(do 
-		(assert (= in 'in))
-	   `(map (fn* (,ident) (do ~rest)) ,lst)))
+(defmacro! list:iter (ident in &rest)
+	   `(map (fn* (,ident) (do ~rest)) ,in))
 
 (defmacro! set! (ident val)
 	`(do (del! ,ident) (val! ,ident ,val)))
@@ -143,9 +144,25 @@
 (defun! str:substr (s (from 0) (to (str:len s)))
 	(str:_substr s from to))
 
-(list:iter file in *ARGS*
+;; insert `this` into a list as first argument (2nd position)
+;; into: function or incomplete expr
+;; like: +, (+ 10), (cons '(1 2 3 4))
+(defmacro! insertarg (this into)
+  (if (list? into)
+    (cons (car into) (cons this (cdr into)))
+    (list into this)))
+
+(defmacro! thread-list (v1 into)
+  (if (empty? into)
+    v1
+    `(thread-list (insertarg ,v1 ,(car into)) ,(cdr into))))
+
+(defmacro! -> (start &rest)
+  `(thread-list ,start ,rest))
+
+(list:iter file :in *ARGS*
 		(println (str "loading file: " (car *ARGS*)))
 		(try* (loadf (car *ARGS*))
-			(catch* ex (println (str "failed to load `"file"`: " ex)))))
+			(catch* ex (println (str "failed to load `" file "`: " ex)))))
 
 )
