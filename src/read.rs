@@ -1,4 +1,5 @@
 use ecow::EcoString;
+use tap::{Pipe, Tap};
 pub use types::*;
 
 use anyhow::{anyhow, Context};
@@ -71,6 +72,20 @@ impl core::str::FromStr for Expr {
     }
 }
 
+fn gen_args(max: Option<u32>) -> Cons {
+    max.map_or_else(
+        || Cons::new(expr!(sym "%")),
+        |max| {
+            let mut l = Cons::nil();
+            for i in (1..=max).rev() {
+                l = cons(expr!(sym format!("%{}", i)), l);
+            }
+
+            cons(expr!(sym "%"), l)
+        },
+    )
+}
+
 impl TokenStream<'_> {
     fn parse(mut self) -> Result<Expr, QxErr> {
         self.parse_atom().and_then(|it| {
@@ -97,18 +112,32 @@ impl TokenStream<'_> {
             "!!" => expr!(cons expr!(atom), self.parse_atom()?),
 
             "#" => {
-                let next = self.parse_list()?;
-                // .map_err(|_| QxErr::MissingToken(anyhow!("List for Anonymous Function")))?;
+                fn flat_find_max(e: &Expr) -> Option<u32> {
+                    match e {
+                        Expr::List(l) => l.iter().filter_map(|it| flat_find_max(&it)).max(),
+                        Expr::Sym(s) if s == "%" => Some(0),
+                        Expr::Sym(s) if s.starts_with('%') => match s[1..].parse().ok() {
+                            Some(0) => None,
+                            el => el,
+                        },
+                        _ => None,
+                    }
+                }
 
-                // (fn* (% ($ :nodef)) <body>)
-                expr![cons
-                    expr!(sym "fn*"),
-                    expr![cons
-                        expr!(sym "%"),
-                        expr![cons expr!(sym "$"),expr!(kw "nodef")]
-                    ],
-                    next
-                ]
+                match self.next() {
+                    Some("(") => {
+                        let next = self.parse_list()?;
+                        let args = flat_find_max(&next).pipe(gen_args);
+
+                        // (fn* (% ($ :nodef)) <body>)
+                        expr![cons
+                            expr!(sym "fn*"),
+                            Expr::List(args),
+                            next
+                        ]
+                    }
+                    _ => Err(QxErr::MissingToken(anyhow!("List for Anonymous Function")))?,
+                }
             }
 
             // quasiquoting

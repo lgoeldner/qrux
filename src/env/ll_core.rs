@@ -95,7 +95,7 @@ pub fn core_func_names() -> Vec<&'static str> {
         "-",
         "*",
         "/",
-        "%",
+        "rem",
         ">",
         "<",
         ">=",
@@ -179,7 +179,7 @@ fn int_ops(ident: &str) -> Option<Expr> {
         "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args)),
         "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args)),
         "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
-        "%" => Func::new_expr("%", |args, _, _| int_op(i64::checked_rem, args)),
+        "rem" => Func::new_expr("rem", |args, _, _| int_op(i64::checked_rem, args)),
 
         ">" => func! { ">";  [lhs, rhs] => Expr::Bool(lhs.to_int()? > rhs.to_int()?) },
         "<" => func! { "<";  [lhs, rhs] => Expr::Bool(lhs.to_int()? < rhs.to_int()?) },
