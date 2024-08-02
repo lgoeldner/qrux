@@ -2,7 +2,7 @@ use colored::Colorize;
 use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
 fn main() -> Result<(), ()> {
-    let exception = "Exception".on_red();
+    let exception = "Exception".red().on_black();
     let mut runtime = match Runtime::new(Term::new()) {
         (_, Err(QxErr::Stop)) => return Ok(()),
         (_, Err(QxErr::Fatal(e))) => {
@@ -33,7 +33,7 @@ fn main() -> Result<(), ()> {
 
 fn rep(runtime: &mut Runtime) -> Result<(), QxErr> {
     let inp = runtime.read_from_stdin()?;
-    let result = runtime.eval(inp, None)?;
+    let result = runtime.eval(inp, None, None)?;
     pp_ast(&result);
 
     Ok(())
