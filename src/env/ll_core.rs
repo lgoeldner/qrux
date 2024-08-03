@@ -205,16 +205,36 @@ fn insert_into_map(map: im::HashMap<Keyword, Expr>, args: Cons) -> QxResult<Expr
     Ok(Expr::Map(m))
 }
 
+fn insert_into_vec(mut v: im::Vector<Expr>, args: &Cons) -> Expr {
+    v.extend(args.iter());
+    Expr::Vec(v)
+}
+
 fn list_builtins(ident: &str) -> Option<Expr> {
     funcmatch! {
         match ident {
+            "get", [v, key] => match v {
+                    _ if v.as_map().is_ok() => 
+                        v.as_map()?
+                         .get(&key.as_kw()?)
+                         .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
+                         .clone(),
+
+                    _ => v.as_vec()?
+                          .get(key.to_int().and_then(as_usize)?)
+                          .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
+                          .clone(),
+                },
+            "vec", [] args @ .. => {
+                Expr::Vec(args.into_iter().collect())
+            },
             "into", [] args @ .. => {
                 let coll = args.car().ok_or_else(|| QxErr::NoArgs(None, "into"))?;
                 match coll {
                     Expr::Map(m) => insert_into_map(m, args.cdr())?,
+                    Expr::Vec(v) => insert_into_vec(v, &args.cdr()),
                     _ => Expr::List(
-                        args
-                            .cdr()
+                        args.cdr()
                             .reversed()
                             .into_iter()
                             .fold(coll.to_list()?, flip(cons))
@@ -226,6 +246,7 @@ fn list_builtins(ident: &str) -> Option<Expr> {
                 lists.into_iter()
                 .map(|it| match it {
                     Expr::List(it) => it,
+                    Expr::Vec(v) => v.into_iter().collect(),
                     el => Cons::new(el),
                 })
                 .reduce(Cons::concat)
@@ -275,7 +296,6 @@ fn env_to_expr(env: &Env) -> Expr {
         let outer_env_expr = env_to_expr(&Env(outer));
         Cons::from(&[Cons::from(&[expr!(kw ":outer"), outer_env_expr]).pipe(Expr::List)])
     });
-
 
     env.vals()
         .borrow()

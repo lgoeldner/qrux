@@ -1,9 +1,33 @@
 use ecow::EcoString;
 use tap::Pipe;
 
-use super::{kw, Atom, Cons, Expr, ExprType, QxErr, QxResult};
+use super::{kw::{self, Keyword}, Atom, Cons, Expr, ExprType, QxErr, QxResult};
 
 impl Expr {
+    pub fn as_map(&self) -> QxResult<im::HashMap<Keyword, Expr>> {
+        match self {
+            Expr::Atom(a) => a.borrow().as_map(),
+            Expr::Map(v) => Ok(v.clone()),
+            _ => Err(QxErr::TypeConvValErr {
+                from: self.get_type(),
+                val: self.clone(),
+                to: ExprType::Map,
+            }),
+        }
+    }
+    
+    pub fn as_vec(&self) -> QxResult<im::Vector<Expr>> {
+        match self {
+            Expr::Atom(a) => a.borrow().as_vec(),
+            Expr::Vec(v) => Ok(v.clone()),
+            _ => Err(QxErr::TypeConvValErr {
+                from: self.get_type(),
+                val: self.clone(),
+                to: ExprType::Vec,
+            }),
+        }
+    }
+    
     pub fn to_atom(&self) -> QxResult<Atom> {
         match self {
             Expr::Atom(a) => Ok(a.clone()),

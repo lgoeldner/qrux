@@ -93,10 +93,43 @@ fn write_map<'a>(
     }
 }
 
+fn write_joined(
+    f: &mut fmt::Formatter<'_>,
+    i: impl Iterator<Item = impl Display>,
+    [open_delim, close_delim]: [&str; 2],
+    len: Option<usize>,
+) -> fmt::Result {
+    let multiline = len.is_some_and(|it| it > 5);
+    let mut p = i.peekable();
+    let delim = if multiline { "\n" } else { " " };
+
+    f.write_str(open_delim)?;
+    if multiline {
+        f.write_str("\n")?;
+    }
+
+    loop {
+        let Some(next) = p.next() else { break };
+        let is_last = p.peek().is_none();
+
+        next.fmt(f)?;
+        if !is_last {
+            f.write_str(delim)?;
+        }
+    }
+
+    if multiline {
+        f.write_str("\n")?;
+    }
+    f.write_str(close_delim)?;
+    Ok(())
+}
+
 impl std::fmt::Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if f.alternate() {
             match self {
+                Self::Vec(v) => write_joined(f, v.iter(), ["[", "]"], Some(v.len())),
                 Self::MapLit(l) => writeln!(f, "MapLit{{{l:?}}}"),
                 Self::Atom(it) => format!("{:#}", it.borrow()).fmt(f),
                 Self::Int(int) => int.to_string().fmt(f),
@@ -118,6 +151,7 @@ impl std::fmt::Display for Expr {
             }
         } else {
             match self {
+                Self::Vec(v) => write_joined(f, v.iter(), ["[", "]"], Some(v.len())),
                 Self::MapLit(l) => write_map(f, l.chunks_exact(2).map(|it| (&it[0], &it[1]))),
                 Self::Atom(it) => format!("<Atom ({})>", it.borrow()).fmt(f),
                 Self::Int(int) => int.to_string().cyan().fmt(f),

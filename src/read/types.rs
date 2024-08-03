@@ -18,6 +18,8 @@ pub type Atom = Rc<RefCell<Expr>>;
 /// cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
+    #[default]
+    Nil,
     Atom(Atom),
     Closure(Rc<Closure>),
     Func(Func),
@@ -27,14 +29,15 @@ pub enum Expr {
     Bool(bool),
     List(Cons),
     Keyword(kw::Keyword),
+    Vec(im::Vector<Expr>),   
     Map(HashMap<Keyword, Expr>),
     MapLit(Rc<[Expr]>),
-    #[default]
-    Nil,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
 pub enum ExprType {
+    #[default]
+    Nil,
     Atom,
     Closure,
     Func,
@@ -44,9 +47,8 @@ pub enum ExprType {
     Bool,
     List,
     Keyword,
+    Vec,
     Map,
-    #[default]
-    Nil,
 }
 
 impl std::fmt::Display for ExprType {
@@ -320,6 +322,7 @@ impl Expr {
     #[must_use]
     pub const fn get_type(&self) -> ExprType {
         match self {
+            Self::Vec(_) => ExprType::Vec,
             Self::Int(_) => ExprType::Int,
             Self::String(_) => ExprType::String,
             Self::Sym(_) => ExprType::Sym,

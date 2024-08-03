@@ -97,7 +97,11 @@ impl Runtime {
                         }
                     }
                 }
-
+                Expr::Vec(mut v) => v
+                    .into_iter()
+                    .map(|it| self.eval(it, env.clone()))
+                    .collect::<QxResult<_>>()
+                    .map(Expr::Vec),
                 Expr::MapLit(m) => {
                     let mut eval = m.iter().map(move |it| self.eval(it.clone(), env.clone()));
 
@@ -116,12 +120,10 @@ impl Runtime {
 
     fn eval_loop(&mut self, args: Cons, env: Option<Env>) -> ControlFlow {
         let env = Env::with_outer(env.unwrap_or_else(|| self.env.clone()));
-        let vars = early_ret!(
-            args
+        let vars = early_ret!(args
             .car()
             .ok_or_else(|| QxErr::NoArgs(Some(args.clone()), "loop"))
-            .and_then(|it| it.to_list())
-        );
+            .and_then(|it| it.to_list()));
 
         let mut names = vec![];
 

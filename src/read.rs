@@ -92,6 +92,8 @@ impl TokenStream<'_> {
             // because it should be consumed in `parse_list`
             ")" => Err(QxErr::MismatchedParen(ParenType::Close))?,
 
+            "[" => Expr::Vec(im::Vector::from(self.parse_list(["[", "]"])?)),
+
             "{" => {
                 let lst = self.parse_list(["{", "}"])?;
 
@@ -106,7 +108,7 @@ impl TokenStream<'_> {
             "'" => expr!(cons expr!(quote), self.parse_atom()?),
             "@" => expr!(cons expr!(deref), self.parse_atom()?),
             "!!" => expr!(cons expr!(atom), self.parse_atom()?),
-            
+
             // anonymous function short form
             // with implicit arity and numbered argument names
             "#" => {
