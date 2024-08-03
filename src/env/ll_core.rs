@@ -1,6 +1,7 @@
 use anyhow::anyhow;
 use ecow::EcoString;
-use tap::Pipe;
+use std::sync::Arc;
+use tap::{Pipe, Tap};
 
 use crate::{
     eval::Shadow,
@@ -15,17 +16,27 @@ use crate::{
     Func,
 };
 
-use std::{cell::RefCell, fmt::Write, num::TryFromIntError, rc::Rc, time::SystemTime};
-
 use super::Env;
+use fxhash::FxHashMap;
+use std::{cell::RefCell, fmt::Write, num::TryFromIntError, time::SystemTime};
+
+macro_rules! fxhashmap {
+    ($( $key:literal => $value:expr ),*) => {
+        [
+            $(($key.into(), $value),)*
+        ]
+        .into_iter()
+        .collect::<FxHashMap<_, _>>()
+    };
+}
 
 #[macro_export]
 macro_rules! func {
     ($(env: $env:pat,)? $(ctx: $ctx:pat,)? $name:literal;
 			[$($arg:pat),*] $($rest:ident @ ..)? => $exp:expr) => {
 		Func::new_expr($name, |args: Cons, _env, _ctx| {
-				$( let $env = _env;)?
-				$(let $ctx = _ctx;)?
+				$( let $env = _env; )?
+				$( let $ctx = _ctx; )?
 
 				let mut _iter = args.into_iter();
 
@@ -35,11 +46,7 @@ macro_rules! func {
 
 				$( let $rest = _iter.rest(); )?
 
-				if !_iter.is_empty() {
-					Err(QxErr::NoArgs(Some(args), $name))?
-				}
-
-
+				if !_iter.is_empty() { Err(QxErr::NoArgs(Some(args), $name))? }
 
 				Ok($exp)
 			},
@@ -62,31 +69,43 @@ macro_rules! func {
 macro_rules! funcmatch {
     (
 		match $it:ident {
-			$($name:literal, $(noeval:$_e:expr,)? [$($arg:pat),*]
-				$($rest:ident @ ..)? $(,env: $env:pat)? $(,ctx: $ctx:pat)?
-			=> $exp:expr,)*
-		}) => {
+			$
+    			($name:literal, $(noeval:$_e:expr,)? [$($arg:pat),*]
+    				$($rest:ident @ ..)? $(,env: $env:pat)? $(,ctx: $ctx:pat)?
+    			=> $exp:expr,
+			)*
+		}
+    ) => {
 
-			match $it {
-				$(
+            fxhashmap! {
+                $(
 					$name => func! {
 						$(env: $env,)? $(ctx: $ctx,)? $name; [$($arg),*] $($rest @ ..)? => $exp
-					},
-				)*
+					}
+				),*
+            }
 
-				_ => None::<Expr>?,
-			}
-			.into()
+			// match $it {
+			// 	$(
+			// 		$name => func! {
+			// 			$(env: $env,)? $(ctx: $ctx,)? $name; [$($arg),*] $($rest @ ..)? => $exp
+			// 		},
+			// 	)*
+
+			// 	_ => None::<Expr>?,
+			// }
+			// .into()
 	};
 }
 
 #[must_use]
-pub fn core_map(sym: &str) -> Option<Expr> {
-    int_ops(sym)
-        .or_else(|| builtins(sym))
-        .or_else(|| list_builtins(sym))
-        .or_else(|| typeconvert(sym))
-        .or_else(|| str_builtins(sym))
+pub fn core_map() -> FxHashMap<EcoString, Expr> {
+    int_ops()
+        .tap_mut(|it| it.extend(builtins()))
+        .tap_mut(|it| it.extend(list_builtins()))
+        .tap_mut(|it| it.extend(typeconvert()))
+        .tap_mut(|it| it.extend(str_builtins()))
+        .tap_mut(|it| it.extend(map_builtins()))
 }
 
 pub fn core_func_names() -> Vec<&'static str> {
@@ -176,8 +195,8 @@ fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
     }
 }
 
-fn int_ops(ident: &str) -> Option<Expr> {
-    match ident {
+fn int_ops() -> FxHashMap<EcoString, Expr> {
+    fxhashmap! {
         "+" => Func::new_expr("+", |args, _, _| int_op(i64::checked_add, args)),
         "-" => Func::new_expr("-", |args, _, _| int_op(i64::checked_sub, args)),
         "*" => Func::new_expr("*", |args, _, _| int_op(i64::checked_mul, args)),
@@ -187,10 +206,8 @@ fn int_ops(ident: &str) -> Option<Expr> {
         ">" => func! { ">";  [lhs, rhs] => Expr::Bool(lhs.to_int()? > rhs.to_int()?) },
         "<" => func! { "<";  [lhs, rhs] => Expr::Bool(lhs.to_int()? < rhs.to_int()?) },
         ">=" => func! {">="; [lhs, rhs] => Expr::Bool(lhs.to_int()? >= rhs.to_int()?) },
-        "<=" => func! {"<="; [lhs, rhs] => Expr::Bool(lhs.to_int()? <= rhs.to_int()?) },
-        _ => None?,
+        "<=" => func! {"<="; [lhs, rhs] => Expr::Bool(lhs.to_int()? <= rhs.to_int()?) }
     }
-    .into()
 }
 
 static FIRST_TIME: Lazy<SystemTime> = Lazy::new(SystemTime::now);
@@ -210,11 +227,11 @@ fn insert_into_vec(mut v: im::Vector<Expr>, args: &Cons) -> Expr {
     Expr::Vec(v)
 }
 
-fn list_builtins(ident: &str) -> Option<Expr> {
+fn list_builtins() -> FxHashMap<EcoString, Expr> {
     funcmatch! {
         match ident {
             "get", [v, key] => match v {
-                    _ if v.as_map().is_ok() => 
+                    _ if v.as_map().is_ok() =>
                         v.as_map()?
                          .get(&key.as_kw()?)
                          .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
@@ -275,7 +292,7 @@ fn list_builtins(ident: &str) -> Option<Expr> {
     }
 }
 
-fn map_builtins(ident: &str) -> Option<Expr> {
+fn map_builtins() -> FxHashMap<EcoString, Expr> {
     funcmatch! {
         match ident {
 
@@ -292,13 +309,15 @@ fn as_usize(i: i64) -> Result<usize, QxErr> {
 }
 
 fn env_to_expr(env: &Env) -> Expr {
+    // TODO: rewrite
     let y = env.inner().outer_env().map_or_else(Cons::nil, |outer| {
         let outer_env_expr = env_to_expr(&Env(outer));
         Cons::from(&[Cons::from(&[expr!(kw ":outer"), outer_env_expr]).pipe(Expr::List)])
     });
 
     env.vals()
-        .borrow()
+        .read()
+        .unwrap()
         .iter()
         .map(|(k, v)| expr!(cons Expr::Sym(k.clone()), v.clone()))
         .fold(y, flip(cons))
@@ -309,7 +328,7 @@ fn flip<A, B, R>(f: impl Fn(B, A) -> R) -> impl Fn(A, B) -> R {
     move |b, a| f(a, b)
 }
 
-fn builtins(ident: &str) -> Option<Expr> {
+fn builtins() -> FxHashMap<EcoString, Expr> {
     funcmatch! {
         match ident {
             "=", [lhs, rhs] => Expr::Bool(lhs == rhs),
@@ -352,9 +371,9 @@ fn builtins(ident: &str) -> Option<Expr> {
 
             "throw", [err] => Err(QxErr::LispErr(err))?,
             "bye", [] => Err(QxErr::Stop)?,
-            "fatal", [ex] => Err(QxErr::Fatal(Rc::new(QxErr::LispErr(ex))))?,
+            "fatal", [ex] => Err(QxErr::Fatal(Arc::new(QxErr::LispErr(ex))))?,
 
-            "atom", [ex] => Expr::Atom(Rc::new(RefCell::new(ex))),
+            "atom", [ex] => Expr::Atom(Arc::new(RefCell::new(ex))),
             "atom?", [ex] => Expr::Bool(matches!(ex, Expr::Atom(_))),
             "deref", [atom] => {
                 match atom {
@@ -389,7 +408,7 @@ fn builtins(ident: &str) -> Option<Expr> {
 
             // move to the global env
             "export!", [l], env:env, ctx:ctx => {
-                if Rc::ptr_eq(&env.inner(), &ctx.env.inner()) {
+                if Arc::ptr_eq(&env.inner(), &ctx.env.inner()) {
                     Err(anyhow!("ExportError: Nowhere to Export"))?;
                 }
 
@@ -407,17 +426,17 @@ fn builtins(ident: &str) -> Option<Expr> {
 
                 Expr::Nil
             },
-
+            "recur", [] args @ .. => Err(QxErr::Recur(args))?,
             // get all defined symbols
             "reflect:defsym", [], env:env => {
-                let y = env.vals().borrow();
+                let y = env.vals().read()?;
                 y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::List)
             },
         }
     }
 }
 
-fn str_builtins(ident: &str) -> Option<Expr> {
+fn str_builtins() -> FxHashMap<EcoString, Expr> {
     funcmatch! {
         match ident {
             "str:len", [s] => Expr::Int(s.as_strt(Type::String)?.len().pipe(as_i64)?),
@@ -454,8 +473,8 @@ fn str_builtins(ident: &str) -> Option<Expr> {
     }
 }
 
-fn typeconvert(ident: &str) -> Option<Expr> {
-    match ident {
+fn typeconvert() -> FxHashMap<EcoString, Expr> {
+    fxhashmap! {
         "int" => Func::new_expr("int", |args, _, _| {
             let Some(arg) = args.car() else {
                 return Err(QxErr::NoArgs(None, "int"));
@@ -495,11 +514,8 @@ fn typeconvert(ident: &str) -> Option<Expr> {
         "sym?" => func! {"sym?"; [it] => Expr::Bool(matches!(it, Expr::Sym(_))) },
         "key?" => func! { "key?"; [it] => Expr::Bool(matches!(it, Expr::Keyword(_))) },
         "list?" => func! {"list?"; [it] => Expr::Bool(matches!(it, Expr::List(_))) },
-        "fn?" => func! {"fn?"; [it] => Expr::Bool(matches!(it, Expr::Closure(_) | Expr::Func(_)))},
-
-        _ => None::<Expr>?,
+        "fn?" => func! {"fn?"; [it] => Expr::Bool(matches!(it, Expr::Closure(_) | Expr::Func(_)))}
     }
-    .pipe(Some)
 }
 
 fn to_sym(arg: &Expr) -> QxResult<Expr> {
