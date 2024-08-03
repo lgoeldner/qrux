@@ -81,6 +81,9 @@
          (str "Not yet implemented: " message) 
          "Not yet implemented!")))
 
+(defmacro! unless (is &rest)
+  `(if ,is nil (do ~rest)))
+
 (defmacro! cond (&rest)
 	(let*  
 	   (first (car rest)
@@ -93,6 +96,22 @@
 					(cons 'cond next)
 					nil))))
 
+;; cond except checks for equality
+;; cond could be `(case true ~rest)
+;; :else for default case
+(defmacro! case (this &rest)
+	(unless (empty? rest)
+    (let*
+	   (first (car rest)
+			condition (car first)
+			expr (nth 1 first)
+			next (cdr rest))
+			`(if (or (= ,this ,condition) (= ,condition :else))
+				,expr
+				,(if next
+					`(case ,this ~next)
+					nil)))))
+
 (defun! dbg (it)
 	(do
 		(prn it)
@@ -102,6 +121,13 @@
 	(if (< from to)
 		(range to :from (+ from 1) :acc (cons from acc))
 		(rev acc)))
+
+;; create a collection of the same type
+(defun! create-coll (same-as)
+  (case (typeof same-as)
+    (:Vec [])
+    (:List ())
+    (:Map {})))
 
 (defmacro! newenv (&rest)
 	`((fn* () (do ~rest))))

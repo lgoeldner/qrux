@@ -141,8 +141,7 @@ impl Runtime {
             match self.eval(body.clone(), Some(env.clone())) {
                 Err(QxErr::Recur(new)) => {
                     for (arg, name) in new.into_iter().zip(&names) {
-                        self.defenv(name, &arg, Some(env.clone()), Shadow::Yes)
-                            .unwrap();
+                        env.set(name.clone(), arg, Shadow::Yes).unwrap();
                     }
                 }
 

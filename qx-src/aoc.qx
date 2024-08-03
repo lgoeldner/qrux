@@ -1,0 +1,62 @@
+
+; 2019 day 1
+(val! 2019-1 
+  #(do
+    (val! inp (slurp "aoc-inp/2019-1.txt"))
+
+    (defun! get-fuel (it)
+      (- (/ it 3) 2))
+
+    (defun! total-fuel (mass (total 0))
+      (let ((fuel (get-fuel mass)))
+        (if (fuel \<= 0)
+          total
+          (total-fuel fuel (+ total fuel)))))
+
+    (-> inp
+        (str:splitby "\n")
+        (map :f total-fuel)
+        (reduce :f +))))
+
+
+; 2019 day 2
+(val! 2019-2-1 #(do
+  (val! inp (slurp "aoc-inp/2019-2.txt"))
+
+  (defun! parse (inp)
+    (-> inp
+      (str:splitby ",")
+      (map :f int)
+      to-vec))
+
+  (defun! 2019-2-1 (parsed (parsed_len (len parsed)))
+    (loop ( codes parsed pos 0 )
+    (let* (
+        ins (-> parsed 
+              (skip pos) 
+              (take 4))
+        op  (car ins)
+        pos (+ 4 pos))
+
+        (if (= op 99)
+            (get codes 0)
+            (let* ( 
+                a-v (get ins 1)
+                b-v (get ins 2)
+                t-v (get ins 3)
+                a   (get codes a-v)
+                b   (get codes b-v)
+                res ((if (= op 1) + *) a b))
+
+              (recur
+                  (set-at codes t-v res)
+                  pos))))))
+
+  (-> inp
+      parse
+      2019-2-1)))
+
+(val! days { :2019-1 2019-1 :2019-2 2019-2-1 })
+(export! '(days chunk))
+
+:Success

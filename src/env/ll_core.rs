@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use ecow::EcoString;
-use std::{rc::Rc};
+use std::rc::Rc;
 use tap::{Pipe, Tap};
 
 use crate::{
@@ -105,7 +105,7 @@ pub fn core_map() -> FxHashMap<EcoString, Expr> {
         .tap_mut(|it| it.extend(list_builtins()))
         .tap_mut(|it| it.extend(typeconvert()))
         .tap_mut(|it| it.extend(str_builtins()))
-        .tap_mut(|it| it.extend(map_builtins()))
+        .tap_mut(|it| it.extend(list_other_builtins()))
 }
 
 fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
@@ -158,19 +158,79 @@ fn insert_into_vec(mut v: im::Vector<Expr>, args: &Cons) -> Expr {
 fn list_builtins() -> FxHashMap<EcoString, Expr> {
     funcmatch! {
         match ident {
-            "get", [v, key] => match v {
-                    _ if v.as_map().is_ok() =>
-                        v.as_map()?
-                         .get(&key.as_kw()?)
-                         .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
-                         .clone(),
+            "take", [from, n] => {
+                match from {
+                    Expr::Vec(v) => {
+                        let i = as_usize(n.to_int()?)?;
+                        if i > v.len() {
+                            Expr::Vec(v)
+                        } else {
+                            Expr::Vec(v.take(i))
+                        }
+                    },
+                    _ => Expr::List(from.to_list()?.iter().take(as_usize(n.to_int()?)?).collect()),
+                }
+            },
+            "skip", [from, n] => {
+                match from {
+                    Expr::Vec(v) => {
+                        let i = as_usize(n.to_int()?)?;
+                        if i > v.len() {
+                            Expr::Vec(v)
+                        } else {
+                            Expr::Vec(v.skip(i))
+                        }
+                    },
+                    _ => Expr::List(from.to_list()?.iter().skip(as_usize(n.to_int()?)?).collect()),
+                }
+            },
+            "set-at", [v, idx, to] => {
+                let mut vec = v.as_vec()?;
+                vec.set(idx.to_int()?.pipe(as_usize)?, to);
+                Expr::Vec(vec)
+            },
+            "cdr", [lst] => Expr::List(lst.to_list()?.cdr()),
+            "list", [] rest @ .. => Expr::List(rest),
+            "len", [v] => Expr::Int(v.as_vec()?.len().pipe(as_i64)?),
+            "len>", [it, this] => match it {
+                Expr::Vec(v) => v.len() > this.to_int()?.pipe(as_usize)?,
+                _ => it.to_list()?.len_is_atleast(this.to_int()?.pipe(as_usize)? + 1),
+            }.pipe(Expr::Bool),
+            "count", [lst] => Expr::Int(lst.to_list()?.into_iter().count().pipe(as_i64)?),
+            "empty?", [lst] => Expr::Bool(
+                match lst {
+                    Expr::Vec(v) => v.is_empty(),
+                    _ => lst.to_list()?.len_is(0),
+                }
+            ),
+            "apply", [func, args], env:env, ctx:ctx => {
+                ctx.eval(Expr::List(cons(func,args.to_list()?)), Some(env))?
+            },
+            "nth", [i, c] => {
+                c.to_list()?
+                 .into_iter()
+                 .nth(i.to_int()?.pipe(as_usize)?)
+                 .ok_or(QxErr::NoArgs(None, "nth"))?
+            },
+        }
+    }
+}
 
-                    _ => v.as_vec()?
-                          .get(key.to_int().and_then(as_usize)?)
-                          .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
-                          .clone(),
-                },
-            "vec", [] args @ .. => {
+fn list_other_builtins() -> FxHashMap<EcoString, Expr> {
+    funcmatch! {
+        match ident {
+            "get", [v, key] => match v {
+                _ if v.as_map().is_ok() =>
+                    v.as_map()?
+                    .get(&key.as_kw()?)
+                    .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
+                    .clone(),
+                _ => v.as_vec()?
+                    .get(key.to_int().and_then(as_usize)?)
+                    .ok_or_else(|| QxErr::Any(anyhow!("IndexErr")))?
+                    .clone(),
+            },
+            "vec-of", [] args @ .. => {
                 Expr::Vec(args.into_iter().collect())
             },
             "into", [] args @ .. => {
@@ -186,7 +246,6 @@ fn list_builtins() -> FxHashMap<EcoString, Expr> {
                     ),
                 }
             },
-
             "concat", [] lists @ .. => {
                 lists.into_iter()
                 .map(|it| match it {
@@ -197,33 +256,16 @@ fn list_builtins() -> FxHashMap<EcoString, Expr> {
                 .reduce(Cons::concat)
                 .map_or(Expr::Nil, Expr::List)
             },
-
             "rev", [it] => Expr::List(it.to_list()?.reversed()),
             "cons", [el, lst] => {
                 Expr::List(cons(el, lst.to_list()?))
             },
-            "car", [lst] => lst.to_list()?.car().unwrap_or(Expr::Nil),
-            "cdr", [lst] => Expr::List(lst.to_list()?.cdr()),
-            "list", [] rest @ .. => Expr::List(rest),
-            "count", [lst] => Expr::Int(lst.to_list()?.into_iter().count().pipe(as_i64)?),
-            "empty?", [lst] => Expr::Bool(lst.to_list()?.len_is(0)),
-            "apply", [func, args], env:env, ctx:ctx => {
-                ctx.eval(Expr::List(cons(func,args.to_list()?)), Some(env))?
+            "car", [lst] => {
+                match lst {
+                    Expr::Vec(v) => v.get(0).unwrap_or(&Expr::Nil).clone(),
+                    _ => lst.to_list()?.car().unwrap_or(Expr::Nil)
+                }
             },
-            "nth", [i, c] => {
-                c.to_list()?
-                 .into_iter()
-                 .nth(i.to_int()?.pipe(as_usize)?)
-                 .ok_or(QxErr::NoArgs(None, "nth"))?
-            },
-        }
-    }
-}
-
-fn map_builtins() -> FxHashMap<EcoString, Expr> {
-    funcmatch! {
-        match ident {
-
         }
     }
 }
@@ -435,13 +477,26 @@ fn typeconvert() -> FxHashMap<EcoString, Expr> {
 
             arg.to_bool().map(Expr::Bool)
         }),
+        "to-list" => func! {"to-list";
+            [any] => match any {
+                Expr::Vec(v) => Expr::List(v.into_iter().collect()),
+                _ => Expr::List(any.to_list()?),
+            }
+        },
+        "to-vec" => func! {"to-vec";
+            [any] => match any {
+                Expr::List(l) => Expr::Vec(l.into_iter().collect()),
+                _ => Expr::Vec(any.as_vec()?),
+            }
+        },
 
         "int?" => func! {"int?"; [it] => Expr::Bool(matches!(it, Expr::Int(_))) },
         "str?" => func! {"str?"; [it] => Expr::Bool(matches!(it, Expr::String(_))) },
         "sym?" => func! {"sym?"; [it] => Expr::Bool(matches!(it, Expr::Sym(_))) },
         "key?" => func! { "key?"; [it] => Expr::Bool(matches!(it, Expr::Keyword(_))) },
         "list?" => func! {"list?"; [it] => Expr::Bool(matches!(it, Expr::List(_))) },
-        "fn?" => func! {"fn?"; [it] => Expr::Bool(matches!(it, Expr::Closure(_) | Expr::Func(_)))}
+        "fn?" => func! {"fn?"; [it] => Expr::Bool(matches!(it, Expr::Closure(_) | Expr::Func(_)))},
+        "vec?" => func! {"vec?"; [it] => Expr::Bool(matches!(it, Expr::Vec(_))) }
     }
 }
 
