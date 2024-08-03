@@ -8,11 +8,12 @@
     clippy::similar_names
 )]
 
-use env::Env;
+use env::{core_map, Env};
+use fxhash::FxHashSet;
 use read::{Cons, Expr, QxResult};
 use reedline::{DefaultPrompt, DefaultPromptSegment, FileBackedHistory, Reedline};
 use std::path::PathBuf;
-use tap::Pipe;
+use tap::{Pipe, Tap};
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;
 
@@ -66,7 +67,8 @@ impl Runtime {
     /// returns the new Runtime and the result of evaluating the prelude and,
     /// if supplied, the first `env::arg` as a file
 
-    pub fn new(repl: Term) -> (Self, QxResult<Expr>) {
+    pub fn new() -> (Self, QxResult<Expr>) {
+        let repl = Term::new();
         let mut prototype = Self::without_prelude(repl);
 
         prototype
@@ -94,7 +96,7 @@ impl Runtime {
     pub fn without_prelude(repl: Term) -> Self {
         Self {
             repl,
-            env: env::Inner::new_env(None),
+            env: Env::core(),
         }
     }
 
@@ -126,9 +128,37 @@ impl Term {
             .with_file_name("qrux-history.txt");
 
         let history = Box::new(FileBackedHistory::with_file(50, dir).unwrap());
-        let commands = env::core_func_names();
 
-        let highlighter = highlighter::Lisp::new(commands);
+        let highlighter = highlighter::Lisp::new(
+            core_map()
+                .into_keys()
+                .map(|it| it.to_string())
+                .collect::<FxHashSet<String>>()
+                .tap_mut(|it| {
+                    it.extend(
+                        [
+                            "fn*",
+                            "loop",
+                            "do",
+                            "val!",
+                            "del!",
+                            "defmacro!",
+                            "mexp",
+                            "try*",
+                            "if",
+                            "let*",
+                            "quote",
+                            "qqex",
+                            "quasiquote",
+                            "do",
+                        ]
+                        .as_slice()
+                        .iter()
+                        .map(ToString::to_string),
+                    );
+                }),
+            None,
+        );
 
         Self {
             prompt: DefaultPrompt {

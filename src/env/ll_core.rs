@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use ecow::EcoString;
-use std::sync::Arc;
+use std::{rc::Rc};
 use tap::{Pipe, Tap};
 
 use crate::{
@@ -106,78 +106,6 @@ pub fn core_map() -> FxHashMap<EcoString, Expr> {
         .tap_mut(|it| it.extend(typeconvert()))
         .tap_mut(|it| it.extend(str_builtins()))
         .tap_mut(|it| it.extend(map_builtins()))
-}
-
-pub fn core_func_names() -> Vec<&'static str> {
-    vec![
-        "+",
-        "-",
-        "*",
-        "/",
-        "rem",
-        ">",
-        "<",
-        ">=",
-        "<=",
-        "concat",
-        "into",
-        "rev",
-        "cons",
-        "car",
-        "cdr",
-        "list",
-        "count",
-        "empty?",
-        "apply",
-        "nth",
-        "=",
-        "t-eq?",
-        "t-eq",
-        "typeof",
-        "println",
-        "prn",
-        "read-string",
-        "slurp",
-        "writef",
-        "eval",
-        "*ENV*",
-        "throw",
-        "bye",
-        "fatal",
-        "atom",
-        "atom?",
-        "deref",
-        "reset!",
-        "swap!",
-        "not",
-        "time",
-        // strings
-        "str:len",
-        "str:splitby",
-        "str:_substr",
-        "str:chars",
-        // types
-        "int",
-        "str",
-        "bool",
-        "str?",
-        "list?",
-        "sym?",
-        "key?",
-        // special forms
-        "del!",
-        "val!",
-        "if",
-        "let*",
-        "do",
-        "fn*",
-        "defmacro!",
-        "try*",
-        "catch*",
-        "reflect:defsym",
-        "loop",
-        "recur",
-    ]
 }
 
 fn int_op(op: fn(i64, i64) -> Option<i64>, args: Cons) -> Result<Expr, QxErr> {
@@ -316,8 +244,7 @@ fn env_to_expr(env: &Env) -> Expr {
     });
 
     env.vals()
-        .read()
-        .unwrap()
+        .borrow()
         .iter()
         .map(|(k, v)| expr!(cons Expr::Sym(k.clone()), v.clone()))
         .fold(y, flip(cons))
@@ -371,9 +298,9 @@ fn builtins() -> FxHashMap<EcoString, Expr> {
 
             "throw", [err] => Err(QxErr::LispErr(err))?,
             "bye", [] => Err(QxErr::Stop)?,
-            "fatal", [ex] => Err(QxErr::Fatal(Arc::new(QxErr::LispErr(ex))))?,
+            "fatal", [ex] => Err(QxErr::Fatal(Rc::new(QxErr::LispErr(ex))))?,
 
-            "atom", [ex] => Expr::Atom(Arc::new(RefCell::new(ex))),
+            "atom", [ex] => Expr::Atom(Rc::new(RefCell::new(ex))),
             "atom?", [ex] => Expr::Bool(matches!(ex, Expr::Atom(_))),
             "deref", [atom] => {
                 match atom {
@@ -408,7 +335,7 @@ fn builtins() -> FxHashMap<EcoString, Expr> {
 
             // move to the global env
             "export!", [l], env:env, ctx:ctx => {
-                if Arc::ptr_eq(&env.inner(), &ctx.env.inner()) {
+                if Rc::ptr_eq(&env.inner(), &ctx.env.inner()) {
                     Err(anyhow!("ExportError: Nowhere to Export"))?;
                 }
 
@@ -429,7 +356,7 @@ fn builtins() -> FxHashMap<EcoString, Expr> {
             "recur", [] args @ .. => Err(QxErr::Recur(args))?,
             // get all defined symbols
             "reflect:defsym", [], env:env => {
-                let y = env.vals().read()?;
+                let y = env.vals().borrow();
                 y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::List)
             },
         }

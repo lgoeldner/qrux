@@ -97,7 +97,7 @@ impl Runtime {
                         }
                     }
                 }
-                Expr::Vec(mut v) => v
+                Expr::Vec(v) => v
                     .into_iter()
                     .map(|it| self.eval(it, env.clone()))
                     .collect::<QxResult<_>>()
@@ -151,10 +151,6 @@ impl Runtime {
         }
     }
 
-    fn eval_recur(&mut self, args: Cons) -> ControlFlow {
-        ControlFlow::Break(Err(QxErr::Recur(args)))
-    }
-
     fn apply(&mut self, ident: &Expr, lst: Cons, env: Option<Env>) -> ControlFlow {
         let xs = lst.cdr();
         let args = xs.into_iter();
@@ -169,7 +165,6 @@ impl Runtime {
 
         match opcode {
             SpecialForm::Loop => self.eval_loop(xs, env),
-            SpecialForm::Recur => self.eval_recur(xs),
             SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
                 [Expr::Sym(ident), expr] => {
@@ -549,7 +544,6 @@ mod special_form_code {
 
     pub enum SpecialForm {
         Loop,
-        Recur,
         Val,
         Del,
         Defmacro,
@@ -570,7 +564,6 @@ mod special_form_code {
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             match s {
                 "loop" => Self::Loop,
-                "recur" => Self::Recur,
                 "val!" => Self::Val,
                 "del!" => Self::Del,
                 "defmacro!" => Self::Defmacro,

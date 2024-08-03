@@ -3,7 +3,7 @@ use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
 
 fn main() -> Result<(), ()> {
     let exception = "Exception".red().on_black();
-    let mut runtime = match Runtime::new(Term::new()) {
+    let mut runtime = match Runtime::new() {
         (_, Err(QxErr::Stop)) => return Ok(()),
         (_, Err(QxErr::Fatal(e))) => {
             let fatal_exception = "Fatal Exception".on_red();

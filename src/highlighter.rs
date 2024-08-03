@@ -1,11 +1,15 @@
-
-use crate::{env::Env, read};
+use crate::{
+    env::{Env, EnvMap},
+    read,
+};
+use ecow::EcoString;
+use fxhash::FxHashSet;
 use nu_ansi_term::{Color, Style};
 use reedline::{Highlighter, StyledText};
 use std::{cell::RefCell, collections::HashSet, sync::Arc};
 
 pub struct Lisp {
-    funcs: EnvMap,
+    funcs: FxHashSet<String>,
     colors: ColorTheme,
 }
 
@@ -123,7 +127,7 @@ impl Highlighter for Lisp {
 
                 "nil" => styled_text.push((Style::from(colors.nil).bold(), token.to_string())),
 
-                kw if self.env.contains(kw) => {
+                func if self.funcs.contains(func) => {
                     styled_text.push((Style::from(colors.func).bold(), token.to_string()));
                 }
 
@@ -152,13 +156,10 @@ impl Highlighter for Lisp {
 
 impl Lisp {
     /// Construct the default highlighter with a given set of extern commands/keywords to detect and highlight
-    pub fn new(
-        env: EnvMap,
-        colors: impl Into<Option<ColorTheme>>,
-    ) -> Self {
+    pub fn new(funcs: FxHashSet<String>, colors: impl Into<Option<ColorTheme>>) -> Self {
         Self {
             colors: colors.into().unwrap_or_default(),
-            env,
+            funcs,
         }
     }
 }

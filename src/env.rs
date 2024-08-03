@@ -3,16 +3,19 @@ use crate::{
     read::{Expr, QxErr},
 };
 
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use ecow::EcoString;
+use fxhash::FxHashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-pub use ll_core::{core_func_names, core_map};
+pub use ll_core::core_map;
 mod ll_core;
+
+pub type EnvMap = RefCell<FxHashMap<EcoString, Expr>>;
 
 #[derive(Clone, Default)]
 pub struct Inner {
     pub(crate) outer: Option<Env>,
-    pub(crate) vals: RefCell<HashMap<EcoString, Expr>>,
+    pub(crate) vals: EnvMap,
 }
 
 impl std::fmt::Debug for Inner {
@@ -28,19 +31,6 @@ impl std::fmt::Debug for Inner {
 pub struct Env(Rc<Inner>);
 
 impl Inner {
-    #[must_use]
-    pub fn new_env(outer: Option<Env>) -> Env {
-        Env(Rc::new(Self {
-            outer,
-            vals: RefCell::default(),
-        }))
-    }
-
-    #[must_use]
-    pub fn with_outer(outer: Env) -> Env {
-        Self::new_env(Some(outer))
-    }
-
     pub fn outer_env(&self) -> Option<Rc<Self>> {
         self.outer.as_ref().map(|it| &it.0).cloned()
     }
@@ -49,9 +39,16 @@ impl Inner {
 pub struct AlreadySetError;
 
 impl Env {
+    pub fn new(outer: impl Into<Option<Env>>) -> Self {
+        Self(Rc::new(Inner {
+            outer: outer.into(),
+            vals: Default::default(),
+        }))
+    }
+
     #[must_use]
     pub fn with_outer(outer: Self) -> Self {
-        Inner::new_env(Some(outer))
+        Env::new(outer)
     }
 
     pub(crate) fn inner(&self) -> Rc<Inner> {
@@ -65,10 +62,8 @@ impl Env {
 
     #[must_use]
     pub fn get(&self, ident: &str) -> Option<Expr> {
-        self.find(ident).map_or_else(
-            || core_map(ident),
-            |env| env.0.vals.borrow().get(ident).cloned(),
-        )
+        self.find(ident)
+            .and_then(|env| env.0.vals.borrow().get(ident).cloned())
     }
 
     /// set to the environment, returns either `Expr::Nil` or a `ShadowError`
@@ -89,7 +84,7 @@ impl Env {
         Ok(Expr::Nil)
     }
 
-    pub fn vals(&self) -> &RefCell<HashMap<EcoString, Expr>> {
+    pub fn vals(&self) -> &EnvMap {
         &self.0.vals
     }
 
@@ -104,5 +99,12 @@ impl Env {
             .then(|| self.clone())
             // or delegate to the outer env
             .or_else(|| self.0.outer.as_ref().and_then(|it| it.find(ident)))
+    }
+
+    pub(crate) fn core() -> Env {
+        Env(Rc::new(Inner {
+            outer: None,
+            vals: RefCell::new(core_map()),
+        }))
     }
 }
