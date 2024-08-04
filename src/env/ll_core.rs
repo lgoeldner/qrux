@@ -189,7 +189,10 @@ fn list_builtins() -> FxHashMap<EcoString, Expr> {
                 vec.set(idx.to_int()?.pipe(as_usize)?, to);
                 Expr::Vec(vec)
             },
-            "cdr", [lst] => Expr::List(lst.to_list()?.cdr()),
+            "cdr", [lst] => match lst {
+                Expr::Vec(v) => if !v.is_empty() { Expr::Vec(v.skip(1)) } else { Expr::Nil },
+                _ => Expr::List(lst.to_list()?.cdr()),
+            },
             "list", [] rest @ .. => Expr::List(rest),
             "len", [v] => Expr::Int(v.as_vec()?.len().pipe(as_i64)?),
             "len>", [it, this] => match it {

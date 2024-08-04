@@ -19,18 +19,22 @@
         (reduce :f +))))
 
 
-; 2019 day 2
-(val! 2019-2-1 #(do
-  (val! inp (slurp "aoc-inp/2019-2.txt"))
+(defun! 2019-2-parse (inp)
+  (-> inp
+    (str:splitby ",")
+    (map :f int)
+    to-vec))
 
-  (defun! parse (inp)
-    (-> inp
-      (str:splitby ",")
-      (map :f int)
-      to-vec))
+(defun! 2019-2-1 (parsed (test false) (parsed_len (len parsed)))
+  (do
+    (val! codes
+      (if test
+        parsed
+        (-> parsed
+          (set-at 1 12)
+          (set-at 2 2))))
 
-  (defun! 2019-2-1 (parsed (parsed_len (len parsed)))
-    (loop ( codes parsed pos 0 )
+    (loop ( codes codes pos 0 )
     (let* (
         ins (-> parsed 
               (skip pos) 
@@ -40,7 +44,7 @@
 
         (if (= op 99)
             (get codes 0)
-            (let* ( 
+            (let* (
                 a-v (get ins 1)
                 b-v (get ins 2)
                 t-v (get ins 3)
@@ -50,13 +54,19 @@
 
               (recur
                   (set-at codes t-v res)
-                  pos))))))
+                  pos)))))))
 
-  (-> inp
-      parse
-      2019-2-1)))
+(val! day2-1
+  { :tests [ "1,0,0,0,99" "2,3,0,3,99" "2,4,4,5,99,0" "1,1,1,4,99,5,6,0,99" ]
+        :inp #(slurp "aoc-inp/2019-2.txt")
+        :do #(-> %
+              2019-2-parse
+              2019-2-1)})
 
-(val! days { :2019-1 2019-1 :2019-2 2019-2-1 })
-(export! '(days chunk))
+(val! days
+  { :2019-1 2019-1
+    :2019-2 day2-1 })
+
+(export! '(days chunk day2-1))
 
 :Success

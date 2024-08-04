@@ -147,13 +147,13 @@
 (defmacro! timed (it)
 	`(timeit (fn* () ,it)))
 
-(defun! map (f over (acc '()))
-  (if (empty? over)
-    (rev acc)
-    (map 
-      f 
-      :over (cdr over) 
-      :acc (cons (f (car over)) acc))))
+(defun! map (f over)
+	(loop (r over acc (create-coll over))
+		(if (empty? r)
+			(if (list? acc) (rev acc) acc)
+			(recur 
+				(cdr r)
+				(into acc (f (car r)))))))
 
 (defun! loadf-exported (path)
 	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
