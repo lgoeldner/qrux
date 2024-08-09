@@ -11,6 +11,8 @@ use special_form_code::SpecialForm;
 use std::rc::Rc;
 use tap::prelude::*;
 
+mod pat_match;
+
 enum ControlFlow {
     Break(QxResult<Expr>),
     Continue(EvalTco),
@@ -166,13 +168,19 @@ impl Runtime {
             SpecialForm::Loop => self.eval_loop(xs, env),
             SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
-                [Expr::Sym(ident), expr] => {
+                [pat, expr] => {
                     ControlFlow::Break(
-                        self.defenv(&ident, &expr, env, Shadow::No)
+                        self.pat_match(&pat, &expr, env.unwrap_or_else(|| self.env.clone())).map(|_| Expr::Nil)
                     )
                 }
             },
-
+            SpecialForm::Def => special_form! {
+                args, "(def! <pat:expr> <to:expr>)";
+                [pat, to] => {
+                    let env = env.unwrap_or_else(|| self.env.clone());
+                    self.pat_match(&pat, &to, env).map(|_| Expr::Nil).pipe(ControlFlow::Break)
+                }
+            },
             SpecialForm::Del => special_form! {
                 args, "(del! <sym>)";
                 [Expr::Sym(s)] => {
@@ -184,7 +192,6 @@ impl Runtime {
                     break_ok!(r)
                 }
             },
-
             SpecialForm::Defmacro => special_form! {
                 args, "(defmacro! <name> <args> <body>)";
                 [Expr::Sym(ident), Expr::List(cl_args), body] => {
@@ -197,46 +204,38 @@ impl Runtime {
                     env.unwrap_or_else(|| self.env.clone()).set(ident, cl, Shadow::Yes).pipe(ControlFlow::Break)
                 }
             },
-
             SpecialForm::Mexp => special_form! {
                 args, "(mexp <macro> <&args>)";
                 [] ..it => ControlFlow::Break(self.macroexpand(Expr::List(it), &env))
             },
-
             SpecialForm::Try => special_form! {
                 args, "(try* <expr> (catch* <sym> <expr>)";
                 [try_expr, Expr::List(catch)] => {
                     self.eval_trycatch(&try_expr, &env, &catch)
                 }
             },
-
             SpecialForm::Fn => special_form! {
                 args, "(fn* (<args>*) <body>)";
                 [Expr::List(args), body] => self.create_closure(&env, args, &body, false)
             },
-
             SpecialForm::If => special_form! {
                 args, "(if <condition> <then> <else>)";
                 [cond, then] ..xs => self.eval_if(&xs, env, &cond, &then)
             },
-
             SpecialForm::Let => special_form! {
                 args, "(let* (<sym> <expr>)+ <expr>)";
                 [Expr::List(bindings), to_eval] => {
                     self.eval_let(&env, bindings, &to_eval)
                 }
             },
-
             SpecialForm::Quote => special_form! {
                 args, "(quote <expr>)";
                 [expr] => ControlFlow::Break(Ok(expr))
             },
-
             SpecialForm::Qqex => special_form! {
                 args, "(qqex <expr>)";
                 [expr] => ControlFlow::Break(quasiquote(&expr))
             },
-
             SpecialForm::QuasiQuote => special_form! {
                 args, "(quasiquote <expr>)";
                 [expr] => ControlFlow::Continue(EvalTco {
@@ -244,30 +243,28 @@ impl Runtime {
                     env
                 })
             },
-
-            SpecialForm::Do => {
-                let mut peekable = args.peekable();
-
-                if peekable.peek().is_none() {
-                    return ControlFlow::Break(Ok(Expr::Nil));
-                }
-
-                // evaluate until the last expr, breaking it from the loop
-                let last_expr = loop {
-                    let it = peekable.next().unwrap();
-                    if peekable.peek().is_none() {
-                        break it;
-                    }
-                    early_ret!(self.eval(it, env.clone()));
-                };
-
-                // return it using TCO
-                ControlFlow::Continue(EvalTco {
-                    ast: last_expr,
-                    env,
-                })
-            }
+            SpecialForm::Do => self.eval_do(args, env),
         }
+    }
+
+    fn eval_do(&mut self, args: ConsIter, env: Option<Env>) -> ControlFlow {
+        let mut peekable = args.peekable();
+        if peekable.peek().is_none() {
+            return ControlFlow::Break(Ok(Expr::Nil));
+        }
+        // evaluate until the last expr, breaking it from the loop
+        let last_expr = loop {
+            let it = peekable.next().unwrap();
+            if peekable.peek().is_none() {
+                break it;
+            }
+            early_ret!(self.eval(it, env.clone()));
+        };
+        // return it using TCO
+        ControlFlow::Continue(EvalTco {
+            ast: last_expr,
+            env,
+        })
     }
 
     fn eval_trycatch(&mut self, try_expr: &Expr, env: &Option<Env>, catch: &Cons) -> ControlFlow {
@@ -324,21 +321,25 @@ impl Runtime {
 
         let env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
 
-        for [binding, expr] in new_bindings.pair_iter() {
-            let Expr::Sym(ident) = binding else {
-                return ControlFlow::Break(Err(QxErr::TypeErr {
-                    expected: ExprType::Sym,
-                    found: binding.get_type(),
-                }));
-            };
+        let env = new_bindings
+            .pair_iter()
+            .try_fold(env, |env, [pat, val]| self.pat_match(&pat, &val, env));
 
-            let val = self.eval(expr, Some(env.clone()));
-            early_ret!(env.set(ident, early_ret!(val), Shadow::No));
-        }
+        // for [binding, expr] in new_bindings.pair_iter() {
+        //     let Expr::Sym(ident) = binding else {
+        //         return ControlFlow::Break(Err(QxErr::TypeErr {
+        //             expected: ExprType::Sym,
+        //             found: binding.get_type(),
+        //         }));
+        //     };
+
+        //     let val = self.eval(expr, Some(env.clone()));
+        //     early_ret!(env.set(ident, early_ret!(val), Shadow::No));
+        // }
 
         ControlFlow::Continue(EvalTco {
             ast: to_eval.clone(),
-            env: Some(env),
+            env: Some(early_ret!(env)),
         })
     }
 
@@ -431,7 +432,7 @@ impl Runtime {
                 .unwrap_or_else(|| self.env.clone())
                 .get(&sym)
                 .or_else(|| is_special_form(&sym).then_some(expr!(sym sym.clone())))
-                .ok_or_else(|| QxErr::NoDefErr(sym))?,
+                .ok_or_else(|| QxErr::NoDef(sym))?,
 
             Expr::List(l) => Expr::List({
                 l.into_iter()
@@ -542,6 +543,7 @@ mod special_form_code {
     use tap::Pipe;
 
     pub enum SpecialForm {
+        Def,
         Loop,
         Val,
         Del,
@@ -575,6 +577,7 @@ mod special_form_code {
                 "qqex" => Self::Qqex,
                 "quasiquote" => Self::QuasiQuote,
                 "do" => Self::Do,
+                "def!" => Self::Def,
                 _ => return Err(()),
             }
             .pipe(Ok)

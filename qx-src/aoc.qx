@@ -35,30 +35,34 @@
           (set-at 2 2))))
 
     (loop ( codes codes pos 0 )
-    (let* (
-        ins (-> parsed 
-              (skip pos) 
-              (take 4))
-        op  (car ins)
-        pos (+ 4 pos))
+		(let* (
+			ins (-> parsed 
+				(skip pos) 
+				(take 4))
+			op  (car ins)
+			pos (+ 4 pos))
 
-        (if (= op 99)
-            (get codes 0)
-            (let* (
-                a-v (get ins 1)
-                b-v (get ins 2)
-                t-v (get ins 3)
-                a   (get codes a-v)
-                b   (get codes b-v)
-                res ((if (= op 1) + *) a b))
+			(if (= op 99)
+				(get codes 0)
+				(let* (
+					a-v (get ins 1)
+					b-v (get ins 2)
+					t-v (get ins 3)
+					a   (get codes a-v)
+					b   (get codes b-v)
+					res ((if (= op 1) + *) a b))
 
-              (recur
-                  (set-at codes t-v res)
-                  pos)))))))
+				(recur
+					(set-at codes t-v res)
+					pos)))))))
 
 (val! day2-1
   { :tests [ "1,0,0,0,99" "2,3,0,3,99" "2,4,4,5,99,0" "1,1,1,4,99,5,6,0,99" ]
-        :inp #(slurp "aoc-inp/2019-2.txt")
+        :inp `(fn* () ,(slurp "aoc-inp/2019-2.txt"))
+        :part1
+          #(-> (slurp "aoc-inp/2019-2.txt")
+                2019-2-parse
+                2019-2-1)
         :do #(-> %
               2019-2-parse
               2019-2-1)})

@@ -390,7 +390,7 @@ fn builtins() -> FxHashMap<EcoString, Expr> {
                     };
 
                     let Some(ex) = env.get(&s) else {
-                        Err(QxErr::NoDefErr(s))?
+                        Err(QxErr::NoDef(s))?
                     };
 
                     ctx.defenv(&s, &ex, None, Shadow::Yes).pipe(drop);
@@ -458,7 +458,7 @@ fn typeconvert() -> FxHashMap<EcoString, Expr> {
             [Expr::Keyword(k)] => Expr::String(k.inspect_inner(|it| EcoString::from(it)))
         },
         "key" => func! {"key";
-            [any] => any.as_strt(Type::Keyword)?.pipe(Keyword::new).pipe(Expr::Keyword)
+            [any] => any.as_strt(Type::Keyword).unwrap_or_else(|_| any.to_string().into()).pipe(Keyword::new).pipe(Expr::Keyword)
         },
         "str" => func! {"str";
             [] any @ .. =>

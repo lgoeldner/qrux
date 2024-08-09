@@ -112,7 +112,7 @@ impl Expr {
                 |it| {
                     Err(QxErr::TypeParseErr {
                         from: self.clone(),
-                        to: ExprType::Bool,
+                        to: ExprType::Int,
                         err: it.into(),
                     })
                 },

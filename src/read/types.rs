@@ -113,7 +113,10 @@ pub enum QxErr {
     ShadowErr(EcoString),
 
     #[error("NoDefErr: `{0}` is not defined!")]
-    NoDefErr(EcoString),
+    NoDef(EcoString),
+
+	#[error("MatchErr: `{0}` does not match `{1}`")]
+	NoMatch(Expr, Expr)
 }
 
 #[derive(Clone, Eq, PartialEq, Default)]

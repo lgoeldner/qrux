@@ -74,7 +74,6 @@ impl Env {
             let is_closure = matches!(val, Expr::Closure(_));
 
             if is_noshadow && already_contains_key && !is_closure {
-                eprintln!("{ident} already set");
                 return Err(QxErr::ShadowErr(ident));
             }
 
