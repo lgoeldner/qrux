@@ -60,16 +60,11 @@
 (val! gt >)
 (val! eq =)
 
-(defmacro! assert (cond)
-	`(if (= ,cond true)
+(defmacro! assert (c (error ""))
+	`(if c
 		nil ; nil if the assertion holds
 		(throw 
-			(str "Assertion Failed: " ',cond))))
-
-(defmacro! assert-or (cond error)
-	`(if (= ,cond true)
-		nil ; nil if the assertion holds
-		(throw error))) ; else throw the error
+			(str "Assertion Failed: " ',cond ", error: " error))))
 
 (defun! unwrap (it)
 	(if (= nil it)

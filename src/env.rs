@@ -42,7 +42,7 @@ impl Env {
     pub fn new(outer: impl Into<Option<Env>>) -> Self {
         Self(Rc::new(Inner {
             outer: outer.into(),
-            vals: Default::default(),
+            vals: RefCell::default(),
         }))
     }
 
@@ -73,7 +73,7 @@ impl Env {
             let already_contains_key = self.0.vals.borrow_mut().contains_key(&ident);
             let is_closure = matches!(val, Expr::Closure(_));
 
-            if is_noshadow && already_contains_key && !is_closure {
+            if is_noshadow && !is_closure && already_contains_key {
                 return Err(QxErr::ShadowErr(ident));
             }
 

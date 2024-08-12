@@ -16,14 +16,15 @@ pub fn pp_ast(ast: &Expr) {
 
 impl std::fmt::Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
+		write_joined(f, self.iter(), ["(", ")"], None)
+        // write!(f, "(")?;
 
-        self.0
-            .as_ref()
-            .map(|it| write_cons_inner(f, it))
-            .transpose()?;
+        // self.0
+        //     .as_ref()
+        //     .map(|it| write_cons_inner(f, it))
+        //     .transpose()?;
 
-        write!(f, ")")
+        // write!(f, ")")
     }
 }
 
@@ -99,7 +100,8 @@ fn write_joined(
     [open_delim, close_delim]: [&str; 2],
     len: Option<usize>,
 ) -> fmt::Result {
-    let multiline = len.is_some_and(|it| it > 5);
+    const MULTILINE_THRESHOLD: usize = 10;
+    let multiline = len.is_some_and(|it| it > MULTILINE_THRESHOLD);
     let mut p = i.peekable();
     let delim = if multiline { "\n" } else { " " };
 
@@ -140,11 +142,12 @@ impl std::fmt::Display for Expr {
                 Self::Func(_) | Self::Closure(_) => Ok(()),
                 Self::Bool(b) => b.to_string().fmt(f),
                 Self::List(it) => {
-                    write!(f, "(")?;
-                    it.0.as_ref()
-                        .map(|it| write_cons_inner(f, it))
-                        .transpose()?;
-                    write!(f, ")")
+                    write_joined(f, it.iter(), ["(", ")"], None)
+                    // write!(f, "(")?;
+                    // it.0.as_ref()
+                    //     .map(|it| write_cons_inner(f, it))
+                    //     .transpose()?;
+                    // write!(f, ")")
                 }
                 Self::Keyword(kw) => write!(f, "{kw}"),
                 Self::Map(map) => write_map(f, map),

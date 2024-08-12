@@ -9,7 +9,7 @@
 
     (defun! total-fuel (mass (total 0))
       (let ((fuel (get-fuel mass)))
-        (if (fuel \<= 0)
+        (if (<= fuel 0)
           total
           (total-fuel fuel (+ total fuel)))))
 

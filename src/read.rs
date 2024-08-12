@@ -199,24 +199,24 @@ impl TokenStream<'_> {
                 break;
             }
 
-            // infix operator, swaps the order of the last and next expressions
-            // expressions to allow things like (10 \+ 10)
-            if self.peek() == Some(r"\") {
-                self.next();
-                let op = self.parse_atom()?;
+            // // infix operator, swaps the order of the last and next expressions
+            // // expressions to allow things like (10 \+ 10)
+            // if self.peek() == Some(r"\") {
+            //     self.next();
+            //     let op = self.parse_atom()?;
 
-                list.push(op);
+            //     list.push(op);
 
-                let len = list.len();
+            //     let len = list.len();
 
-                if len < 2 {
-                    return Err(QxErr::Any(anyhow!("Invalid infix operator use!")));
-                }
+            //     if len < 2 {
+            //         return Err(QxErr::Any(anyhow!("Invalid infix operator use!")));
+            //     }
 
-                list.swap(len - 1, len - 2);
+            //     list.swap(len - 1, len - 2);
 
-                continue;
-            }
+            //     continue;
+            // }
 
             list.push(self.parse_atom()?);
         }
