@@ -17,6 +17,9 @@ use tap::{Pipe, Tap};
 
 type FuncT = fn(Cons, Env, &mut Runtime) -> Result<Expr, read::QxErr>;
 
+/// An instance of a qx runtime. 
+/// Use `Runtime::new()` to create
+/// Use `Runtime::eval`
 pub struct Runtime {
     repl: Term,
     env: Env,
@@ -41,6 +44,7 @@ impl PartialEq for Func {
     }
 }
 
+/// Represents the Terminal, used for highlighting and prompting
 pub struct Term {
     prompt: DefaultPrompt,
     reedline: Reedline,
@@ -66,7 +70,6 @@ impl Func {
 impl Runtime {
     /// returns the new Runtime and the result of evaluating the prelude and,
     /// if supplied, the first `env::arg` as a file
-
     pub fn new() -> (Self, QxResult<Expr>) {
         let repl = Term::new();
         let mut prototype = Self::without_prelude(repl);

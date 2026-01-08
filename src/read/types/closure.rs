@@ -49,7 +49,7 @@ impl Closure {
             No,
         }
 
-        let env = Env::with_outer(self.captured.clone());
+        let env = Env::new(self.captured.clone());
 
         let mut bound_idents = self
             .args

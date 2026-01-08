@@ -121,7 +121,7 @@ impl Runtime {
     }
 
     fn eval_loop(&mut self, args: Cons, env: Option<Env>) -> ControlFlow {
-        let env = Env::with_outer(env.unwrap_or_else(|| self.env.clone()));
+        let env = Env::new(env.unwrap_or_else(|| self.env.clone()));
         let vars = early_ret!(args
             .car()
             .ok_or_else(|| QxErr::NoArgs(Some(args.clone()), "loop"))
@@ -293,7 +293,7 @@ impl Runtime {
                 // get the symbol to bind the error to
 
                 // create the env with the error
-                let err_env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
+                let err_env = Env::new(env.as_ref().unwrap_or(&self.env).clone());
 
                 // bind the error
                 err_env
@@ -319,7 +319,7 @@ impl Runtime {
     fn eval_let(&mut self, env: &Option<Env>, new_bindings: Cons, to_eval: &Expr) -> ControlFlow {
         // create new env, set as current, old env is now self.env.outer
 
-        let env = Env::with_outer(env.as_ref().unwrap_or(&self.env).clone());
+        let env = Env::new(env.as_ref().unwrap_or(&self.env).clone());
 
         let env = new_bindings
             .pair_iter()

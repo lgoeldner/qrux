@@ -5,6 +5,7 @@ use kw::Keyword;
 use std::{cell::RefCell, rc::Rc};
 use thiserror::Error;
 
+
 pub type QxResult<T> = Result<T, QxErr>;
 
 pub mod closure;
@@ -13,8 +14,22 @@ pub use closure::Closure;
 pub mod cast;
 pub mod kw;
 
+/// A mutable reference to an `Expr`, used for shared and updatable bindings
 pub type Atom = Rc<RefCell<Expr>>;
 
+/// The basic Lisp Expression type
+/// ### Variants:
+/// - `Nil`
+/// - `Atom`: a mutable `Expr`
+/// - `Closure`: A callable, lisp defined function object. captures outer scopes, create with (fn* (arg1 arg2 ...) (body))
+/// - `Func`: A builtin, natively implemented function
+/// - `Int`, `String`: normal lisp types
+/// - `Sym`: An identifier. quote with '
+/// - `List`: create a list with with ' (quote) or (list item1 item2 ...)
+/// - `Keyword`: Used for keyword arguments in functions. cheaper to store than String and Sym but is not deallocated
+/// - `Vec`: A non-linked list. Create with [], index with get
+/// - `Map`: A Hashmap. Create with {}. maps keywords to `Expr`
+/// - `MapLit`: intermediate that becomes a real `Map` when evaluated
 /// cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
@@ -29,11 +44,12 @@ pub enum Expr {
     Bool(bool),
     List(Cons),
     Keyword(kw::Keyword),
-    Vec(im::Vector<Expr>),   
+    Vec(im::Vector<Expr>),
     Map(HashMap<Keyword, Expr>),
     MapLit(Rc<[Expr]>),
 }
 
+/// the type of an expression. Used internally and when using the typeof builtin
 #[derive(Clone, Copy, Eq, PartialEq, Default, Debug)]
 pub enum ExprType {
     #[default]
@@ -51,6 +67,7 @@ pub enum ExprType {
     Map,
 }
 
+// Display is Debug
 impl std::fmt::Display for ExprType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
@@ -58,7 +75,9 @@ impl std::fmt::Display for ExprType {
 }
 
 use colored::Colorize;
-
+/// The Error Type. Can be displayed nicely for the user. uses thiserror
+/// Unified error type for reader, evaluator, and runtime
+/// Designed for user friendly display and structured handling
 #[derive(Error, Debug)]
 pub enum QxErr {
     #[error("RecurErr: Missing Loop, Args: {0}")]
@@ -66,6 +85,7 @@ pub enum QxErr {
 
     #[error("Interrupted, Stop")]
     Stop,
+
     #[error("FatalErr: {0:#}")]
     Fatal(#[from] Rc<QxErr>),
 
@@ -86,6 +106,7 @@ pub enum QxErr {
     #[error("TypeError, expected: {expected}, found: {found}")]
     TypeErr { expected: ExprType, found: ExprType },
 
+    // originates from (throw expr) in code
     #[error("{0:#}")]
     LispErr(Expr),
 
@@ -115,19 +136,30 @@ pub enum QxErr {
     #[error("NoDefErr: `{0}` is not defined!")]
     NoDef(EcoString),
 
-	#[error("MatchErr: `{0}` does not match `{1}`")]
-	NoMatch(Expr, Expr)
+    #[error("MatchErr: `{0}` does not match `{1}`")]
+    NoMatch(Expr, Expr),
 }
 
+/// The basic linked list type
+/// encapsulates a ConsCell, doesnt allocate for empty Cons
 #[derive(Clone, Eq, PartialEq, Default)]
 pub struct Cons(pub Option<Rc<ConsCell>>);
 
+/// A single cons cell containing a value and a pointer to the rest of the list
 #[derive(Clone, Eq, PartialEq, Default)]
 pub struct ConsCell {
     pub car: Expr,
     pub cdr: Cons,
 }
 
+/// An Iterator over a Linked List
+#[derive(Clone)]
+pub struct ConsIter {
+    head: Cons,
+}
+
+/// Always gives two consecutive pairs in Iteration, otherwise stops
+/// (discards last item that doesnt get a pairing item)
 pub struct ConsExactPairIter {
     iter: ConsIter,
 }
@@ -140,11 +172,6 @@ impl Iterator for ConsExactPairIter {
     }
 }
 
-#[derive(Clone)]
-pub struct ConsIter {
-    head: Cons,
-}
-
 impl ConsIter {
     #[must_use]
     pub const fn inner(&self) -> &Cons {
@@ -153,6 +180,7 @@ impl ConsIter {
 }
 
 impl ConsIter {
+    /// get the remaining list back
     pub fn rest(&mut self) -> Cons {
         Cons(self.head.0.take())
     }
@@ -212,6 +240,7 @@ impl Cons {
         result
     }
 
+    /// Reverse the List, returns reversed
     #[must_use]
     pub fn reversed(self) -> Self {
         let mut acc = Self(None);
@@ -312,6 +341,7 @@ impl IntoIterator for &Cons {
     }
 }
 
+/// Utility methods for inspecting and querying expressions
 impl Expr {
     #[must_use]
     pub fn contains_sym(&self, sym: &str) -> bool {
