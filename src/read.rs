@@ -29,14 +29,14 @@ static RE: Lazy<Regex> = Lazy::new(|| {
 ///   - ` : quasiquoting:
 ///     - ~ : splice-unquote
 ///     - , : unquote
-pub fn tokenize(input: &str) -> TokenStream {
+pub fn tokenize(input: &'_ str) -> TokenStream<'_> {
     RE.find_iter(input)
         .map(|it| it.as_str().trim())
         .filter(|it| !it.is_empty() && !it.starts_with(';'))
         .collect()
 }
 
-pub fn tokenize_with_whitespace(input: &str) -> TokenStream {
+pub fn tokenize_with_whitespace(input: &'_ str) -> TokenStream<'_> {
     RE.find_iter(input).map(|it| it.as_str()).collect()
 }
 

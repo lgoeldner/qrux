@@ -1,12 +1,7 @@
-use crate::{
-    env::{Env, EnvMap},
-    read,
-};
-use ecow::EcoString;
+use crate::read;
 use fxhash::FxHashSet;
 use nu_ansi_term::{Color, Style};
 use reedline::{Highlighter, StyledText};
-use std::{cell::RefCell, collections::HashSet, sync::Arc};
 
 pub struct Lisp {
     funcs: FxHashSet<String>,

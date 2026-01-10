@@ -5,11 +5,9 @@ use kw::Keyword;
 use std::{cell::RefCell, rc::Rc};
 use thiserror::Error;
 
-
 pub type QxResult<T> = Result<T, QxErr>;
 
 pub mod closure;
-pub mod typing;
 pub use closure::Closure;
 pub mod cast;
 pub mod kw;

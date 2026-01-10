@@ -9,14 +9,23 @@
 (defmacro! when (c &rest)
 	`(if ,c (do ~rest)))
 
+; define local bindings
+; works by creating a temporary closure
+; that is then called with the values specified
+; b is a list of pairs, each a sym and then the value
+; e is the expression to be evaluated
+; replaces let*
+; example: (let ((b1 1) (b2 2)) (+ b1 b2)) => 3
 (defmacro! let (b e)
 	`((fn*
-        ,(map car b) ,e) 
+        ,(map car b) ,e)
         ~(map cadr b)))
 
+; compare two types
 (defun! t= (a b)
     (= (typeof a) (typeof b)))
 
+; boolean or
 (defmacro! and (lhs rhs)
 	`(if ,lhs
 		(if ,rhs
@@ -24,6 +33,7 @@
 			false)
 		false))
 
+;boolean and
 (defmacro! or (lhs rhs)
 	`(if ,lhs
 		true
@@ -33,21 +43,24 @@
 
 (defun! rep (str)
 	(eval
+	    ; make sure the str is not a variable when evaluating
 		(read-string (del! str))))
 
 ; load a file and execute it with a do block wrapped around
 (defun! loadf (path)
 		(rep
-			(str 
-				"(do\n" 
+			(str
+				"(do\n"
 				(slurp (str path))
 				"\n)")))
 
+; delay evaluation of `form`
 (defmacro! fn (form)
   `(fn* () ,form))
 
 ; swaps the order of two arguments
-(defun! flip (func) 
+; return a curried function
+(defun! flip (func)
 	(fn* (a b) (func b a)))
 
 (defun! append (el to)
@@ -63,24 +76,25 @@
 (defmacro! assert (c (error ""))
 	`(if c
 		nil ; nil if the assertion holds
-		(throw 
-			(str "Assertion Failed: " ',cond ", error: " error))))
+		(throw
+			(str "Assertion Failed: " ',c ", error: " error))))
 
+; convert a nil into an error
 (defun! unwrap (it)
 	(if (= nil it)
 		(throw "Non-nil Assertion failed!")
 		it))
 
 (defun! todo ((message nil))
-  (throw (if message 
-         (str "Not yet implemented: " message) 
+  (throw (if message
+         (str "Not yet implemented: " message)
          "Not yet implemented!")))
 
 (defmacro! unless (is &rest)
   `(if ,is nil (do ~rest)))
 
 (defmacro! cond (&rest)
-	(let*  
+	(let*
 	   (first (car rest)
 			condition (car first)
 			expr (nth 1 first)
@@ -146,7 +160,7 @@
 	(loop (r over acc (create-coll over))
 		(if (empty? r)
 			(if (list? acc) (rev acc) acc)
-			(recur 
+			(recur
 				(cdr r)
 				(into acc (f (car r)))))))
 
@@ -171,7 +185,7 @@
   (loop (acc init over over)
     (if (empty? over)
       acc
-      (recur 
+      (recur
         (f acc (car over))
         (cdr over)))))
 
@@ -181,15 +195,15 @@
 (defun! zip (a b (acc ()))
 	(if (or (empty? a) (empty? b))
 		(rev acc)
-		(zip 
+		(zip
 			(cdr a) (cdr b)
 			(cons (list (car a) (car b)) acc))))
 
 (defun! flatmap (f over (acc ()))
   (if (empty? over)
     (rev acc)
-    (let* 
-		  (el (car over)  
+    (let*
+		  (el (car over)
 			 next (if (list? el) (flatmap f (car over)) (f el)))
 
       (flatmap f :over (cdr over) :acc (cons next acc)))))
@@ -221,9 +235,11 @@
 (defmacro! -> (start &rest)
   `(thread-list ,start ,rest))
 
-(list:iter file :in *ARGS*
-		(println (str "loading file: " (car *ARGS*)))
-		(try* (loadf (car *ARGS*))
-			(catch* ex (println (str "failed to load `" file "`: " ex)))))
+; load and evaluate the first argument as a file if there is an argument 
+(unless (= nil (car *ARGS*)) 
+	(println (str "loading: " (car *ARGS*)))
+	(try* (println (str "returned: " (loadf (car *ARGS*))))
+		(catch* ex (println (str "failed to load" (car *ARGS*) " error:" ex)))))
+
 
 )

@@ -1,7 +1,7 @@
 use crate::{
     env::Env,
     expr,
-    read::{cons, types::closure::Closure, Cons, ConsIter, Expr, ExprType, QxErr, QxResult},
+    read::{cons, types::closure::Closure, Cons, ConsIter, Expr, QxErr, QxResult},
     special_form, Func, Runtime,
 };
 
@@ -16,7 +16,6 @@ mod pat_match;
 enum ControlFlow {
     Break(QxResult<Expr>),
     Continue(EvalTco),
-    // Recur { env: Env },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -74,6 +73,7 @@ struct EvalTco {
 }
 
 impl Runtime {
+    /// the main evaluation function
     pub fn eval(&mut self, mut in_ast: Expr, mut env: Option<Env>) -> Result<Expr, QxErr> {
         // loop for TCO
         loop {
@@ -83,6 +83,7 @@ impl Runtime {
                 Expr::List(Cons(None)) => Ok(ast),
 
                 Expr::List(ref list) => {
+                    // an empty list was already matched out
                     let ident = &list.car().unwrap();
 
                     match self.apply(ident, list.clone(), env.clone()) {
@@ -120,43 +121,18 @@ impl Runtime {
         }
     }
 
-    fn eval_loop(&mut self, args: Cons, env: Option<Env>) -> ControlFlow {
-        let env = Env::new(env.unwrap_or_else(|| self.env.clone()));
-        let vars = early_ret!(args
-            .car()
-            .ok_or_else(|| QxErr::NoArgs(Some(args.clone()), "loop"))
-            .and_then(|it| it.to_list()));
-
-        let mut names = vec![];
-
-        for [name, arg] in vars.pair_iter() {
-            let name = early_ret!(name.as_strt(ExprType::Sym));
-            names.push(name.clone());
-
-            self.defenv(&name, &arg, Some(env.clone()), Shadow::Yes)
-                .unwrap();
-        }
-
-        let body = args.cdr().car().unwrap();
-
-        loop {
-            match self.eval(body.clone(), Some(env.clone())) {
-                Err(QxErr::Recur(new)) => {
-                    for (arg, name) in new.into_iter().zip(&names) {
-                        env.set(name.clone(), arg, Shadow::Yes).unwrap();
-                    }
-                }
-
-                res => return ControlFlow::Break(res),
-            }
-        }
-    }
-
+    /// call a function `ident`. the whole expression is in lst.
+    /// this function decides wether a special form is being used and handles that
+    /// or delegates to `apply_func` for builtins and lisp closures
     fn apply(&mut self, ident: &Expr, lst: Cons, env: Option<Env>) -> ControlFlow {
+        // arguments after the ident
         let xs = lst.cdr();
         let args = xs.into_iter();
 
+        // continue only if ident is a special form.
+
         let Expr::Sym(ref ident) = ident else {
+            // otherwise, apply the function (lisp or builtin) by normal evaluation
             return self.apply_func(Expr::List(lst), env);
         };
 
@@ -165,7 +141,7 @@ impl Runtime {
         };
 
         match opcode {
-            SpecialForm::Loop => self.eval_loop(xs, env),
+            // SpecialForm::Loop => self.eval_loop(xs, env),
             SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
                 [pat, expr] => {
@@ -378,7 +354,10 @@ impl Runtime {
         break_ok!(Expr::Closure(Rc::new(early_ret!(cl))))
     }
 
+    /// Apply a Func or Closure
     fn apply_func(&mut self, ast: Expr, env: Option<Env>) -> ControlFlow {
+        // prepare the list for the function call by evaluating the elements in it
+        // example: (+ 10 20) => (<Func "+"> 10 20)
         let new = match self.replace_eval(ast, env.clone()) {
             Ok(Expr::List(new)) => new,
             Ok(wrong) => return err!(break "Not a List: {wrong:?}"),
@@ -407,7 +386,8 @@ impl Runtime {
         }
     }
 
-    /// Todo: fix memory leak due to ref cycle without UB
+    // Todo: fix memory leak due to ref cycle without UB
+    // when a closure captures the environment it is stored in, a ref cycle gets created
     pub fn defenv(
         &mut self,
         ident: &EcoString,
@@ -424,8 +404,8 @@ impl Runtime {
     }
 
     // named eval_ast in mal
-    // replaces symbols with their values
-    // evaluates lists
+    /// replaces symbols with their values
+    /// prepares for function evaluation by
     pub fn replace_eval(&mut self, ast: Expr, env: Option<Env>) -> Result<Expr, QxErr> {
         Ok(match ast {
             Expr::Sym(sym) => env
@@ -544,7 +524,6 @@ mod special_form_code {
 
     pub enum SpecialForm {
         Def,
-        Loop,
         Val,
         Del,
         Defmacro,
@@ -564,7 +543,6 @@ mod special_form_code {
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             match s {
-                "loop" => Self::Loop,
                 "val!" => Self::Val,
                 "del!" => Self::Del,
                 "defmacro!" => Self::Defmacro,
