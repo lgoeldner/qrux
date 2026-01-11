@@ -79,20 +79,20 @@ Example:
       (/ 3))  ;    => 100
   ```
 
-- quasiquoting and quoting is a way to make a lisp expression not be treated as a function call but as data
-  quasiquoting means, you get to splice together things that will be evaluated at runtime and things that wont be
+- quasiquoting and quoting is a way to make a lisp expression not be treated as a function call but as data.
+  quasiquoting means, you get to splice together things that will be evaluated at runtime and things that are constant
 
-example: 
+  example: 
   ```clojure
-  (val! a 100)
+    (val! a 100)
 
-  ; quoting
-  '(1 2 3)      ;  => (1 2 3)
+    ; quoting
+    '(1 2 3)      ;  => (1 2 3)
 
-  ; quasiquoting
-  `(,a 200 300) ;  => (100 200 300)
-  
-  ; splicing
-  (val! l '(1 2 3))
-  `(~l 4 5 6)    ; => (1 2 3 4 5 6)
+    ; quasiquoting
+    `(,a 200 300) ;  => (100 200 300)
+    
+    ; splicing
+    (val! l '(1 2 3))
+    `(~l 4 5 6)    ; => (1 2 3 4 5 6)
   ```
