@@ -141,7 +141,7 @@ impl Runtime {
         };
 
         match opcode {
-            SpecialForm::Loop => self.eval_loop(xs, env),
+            SpecialForm::Loop => self.eval_loop(&xs, env),
             SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
                 [pat, expr] => {
@@ -172,7 +172,7 @@ impl Runtime {
                 args, "(defmacro! <name> <args> <body>)";
                 [Expr::Sym(ident), Expr::List(cl_args), body] => {
                     let ControlFlow::Break(Ok(cl @ Expr::Closure(_)))
-                            = self.create_closure(&env, cl_args, &body, true)
+                            = self.create_closure(&env, &cl_args, &body, true)
                     else {
                         unreachable!();
                     };
@@ -192,7 +192,7 @@ impl Runtime {
             },
             SpecialForm::Fn => special_form! {
                 args, "(fn* (<args>*) <body>)";
-                [Expr::List(args), body] => self.create_closure(&env, args, &body, false)
+                [Expr::List(args), body] => self.create_closure(&env, &args, &body, false)
             },
             SpecialForm::If => special_form! {
                 args, "(if <condition> <then> <else>)";
@@ -341,9 +341,9 @@ impl Runtime {
     }
 
     fn create_closure(
-        &mut self,
+        &self,
         env: &Option<Env>,
-        args: Cons,
+        args: &Cons,
         body: &Expr,
         is_macro: bool,
     ) -> ControlFlow {
@@ -354,7 +354,7 @@ impl Runtime {
         break_ok!(Expr::Closure(Rc::new(early_ret!(cl))))
     }
 
-    fn eval_loop(&mut self, args: Cons, env: Option<Env>) -> ControlFlow {
+    fn eval_loop(&mut self, args: &Cons, env: Option<Env>) -> ControlFlow {
         let env = Env::new(env.unwrap_or_else(|| self.env.clone()));
 
         let vars = early_ret!(args

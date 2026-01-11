@@ -108,7 +108,7 @@ impl Runtime {
     }
 
     #[inline]
-    pub(crate) fn term(&mut self) -> &mut Term {
+    pub(crate) const fn term(&mut self) -> &mut Term {
         &mut self.repl
     }
 }

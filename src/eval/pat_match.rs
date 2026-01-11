@@ -21,7 +21,7 @@ impl Runtime {
                 }
 
                 if i1.next().is_some() || i2.next().is_some() {
-                    Err(QxErr::NoMatch(pat.clone(), val.clone()))
+                    Err(QxErr::NoMatch(format!("{pat} does not match {val}").into()))
                 } else {
                     Ok(env)
                 }
@@ -41,14 +41,14 @@ impl Runtime {
                 }
 
                 if i1.next().is_some() || i2.next().is_some() {
-                    Err(QxErr::NoMatch(pat.clone(), val.clone()))
+                    Err(QxErr::NoMatch(format!("{pat} does not match {val}").into()))
                 } else {
                     Ok(env)
                 }
             }
             (Expr::Int(i), Expr::Int(i2)) if i == i2 => Ok(env),
 
-            _ => Err(QxErr::NoMatch(pat.clone(), val.clone())),
+            _ => Err(QxErr::NoMatch(format!("{pat} does not match {val}").into())),
         }
     }
 }

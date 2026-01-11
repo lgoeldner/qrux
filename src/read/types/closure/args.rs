@@ -49,8 +49,8 @@ impl TryFrom<Expr> for Arg {
 
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
         let get_vararg_sym = |it: EcoString| {
-            if it.starts_with('&') {
-                (true, it[1..].into())
+            if let Some(stripped) = it.strip_prefix('&') {
+                (true, stripped.into())
             } else {
                 (false, it)
             }
@@ -97,7 +97,7 @@ impl Args {
         &self.args
     }
 
-    pub fn new(args: Cons) -> QxResult<Self> {
+    pub fn new(args: &Cons) -> QxResult<Self> {
         let mut has_vararg = false;
 
         let proto = args

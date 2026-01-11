@@ -32,7 +32,7 @@ impl PartialEq for Closure {
 }
 
 impl Closure {
-    pub fn new(args: Cons, body: Expr, captured: Env, is_macro: bool) -> QxResult<Self> {
+    pub fn new(args: &Cons, body: Expr, captured: Env, is_macro: bool) -> QxResult<Self> {
         Self {
             body,
             captured,

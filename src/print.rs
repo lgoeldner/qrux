@@ -1,11 +1,8 @@
 use core::fmt;
-use std::{fmt::Display, rc::Rc};
+use std::fmt::Display;
 
 use crate::{
-    read::{
-        kw::{self, Keyword},
-        Closure, Cons, ConsCell, Expr,
-    },
+    read::{Closure, Cons, Expr},
     Func,
 };
 use colored::Colorize;
@@ -16,7 +13,7 @@ pub fn pp_ast(ast: &Expr) {
 
 impl std::fmt::Display for Cons {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		write_joined(f, self.iter(), ["(", ")"], None)
+        write_joined(f, self.iter(), ["(", ")"], None)
         // write!(f, "(")?;
 
         // self.0
@@ -31,32 +28,6 @@ impl std::fmt::Display for Cons {
 impl std::fmt::Debug for Cons {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         <Self as std::fmt::Display>::fmt(self, f)
-    }
-}
-
-fn write_cons_inner(f: &mut fmt::Formatter, list: &Rc<ConsCell>) -> fmt::Result {
-    let mut current = list;
-
-    while let ConsCell {
-        ref car,
-        cdr: Cons(Some(ref cdr)),
-    } = **current
-    {
-        if f.alternate() {
-            write!(f, "{car:#}")?;
-        } else {
-            write!(f, "{car}")?;
-        }
-
-        write!(f, " ")?;
-
-        current = cdr;
-    }
-
-    if f.alternate() {
-        write!(f, "{:#}", current.car)
-    } else {
-        write!(f, "{}", current.car)
     }
 }
 

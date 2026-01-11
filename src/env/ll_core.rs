@@ -183,7 +183,7 @@ fn list_builtins() -> FxHashMap<EcoString, Expr> {
                 Expr::Vec(vec)
             },
             "cdr", [lst] => match lst {
-                Expr::Vec(v) => if !v.is_empty() { Expr::Vec(v.skip(1)) } else { Expr::Nil },
+                Expr::Vec(v) => if v.is_empty() { Expr::Nil } else { Expr::Vec(v.skip(1)) },
                 _ => Expr::List(lst.to_list()?.cdr()),
             },
             "list", [] rest @ .. => Expr::List(rest),

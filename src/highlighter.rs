@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::read;
 use fxhash::FxHashSet;
 use nu_ansi_term::{Color, Style};
@@ -74,8 +76,8 @@ impl Highlighter for Lisp {
                     };
 
                     let mut stack = 1;
-                    loop {
-                        let Some(t) = tokens.next() else { break };
+                    for t in &mut tokens {
+                        // let Some(t) = tokens.next() else { break };
 
                         match t.trim() {
                             ")" => stack -= 1,
@@ -161,6 +163,6 @@ impl Lisp {
 
 impl Default for Lisp {
     fn default() -> Self {
-        Self::new(Default::default(), None)
+        Self::new(HashSet::default(), None)
     }
 }

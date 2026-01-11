@@ -1,4 +1,4 @@
-use crate::{env::Env, Func};
+use crate::Func;
 use ecow::EcoString;
 use im::HashMap;
 use kw::Keyword;
@@ -28,7 +28,7 @@ pub type Atom = Rc<RefCell<Expr>>;
 /// - `Vec`: A non-linked list. Create with [], index with get
 /// - `Map`: A Hashmap. Create with {}. maps keywords to `Expr`
 /// - `MapLit`: intermediate that becomes a real `Map` when evaluated
-/// cheap to clone, only contains `Copy` or `Rc`s
+///   cheap to clone, only contains `Copy` or `Rc`s
 #[derive(Clone, Eq, PartialEq, Default)]
 pub enum Expr {
     #[default]
@@ -144,12 +144,12 @@ pub enum QxErr {
     #[error("NoDefErr: `{0}` is not defined!")]
     NoDef(EcoString),
 
-    #[error("MatchErr: `{0}` does not match `{1}`")]
-    NoMatch(Expr, Expr),
+    #[error("MatchErr: {0}")]
+    NoMatch(EcoString),
 }
 
 /// The basic linked list type
-/// encapsulates a ConsCell, doesnt allocate for empty Cons
+/// encapsulates a `ConsCell`, doesnt allocate for empty Cons
 #[derive(Clone, Eq, PartialEq, Default)]
 pub struct Cons(pub Option<Rc<ConsCell>>);
 
@@ -189,7 +189,7 @@ impl ConsIter {
 
 impl ConsIter {
     /// get the remaining list back
-    pub fn rest(&mut self) -> Cons {
+    pub const fn rest(&mut self) -> Cons {
         Cons(self.head.0.take())
     }
 

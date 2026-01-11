@@ -19,9 +19,10 @@ mod ll_core;
 
 pub type EnvMap = RefCell<FxHashMap<EcoString, Expr>>;
 
-/// The `Env` stores a shared Map of Symbols to their Expressions
+/// The `Env` stores a shared Map of Symbols to their Expressions. It is nested to allow scoping
+///
 /// And also an outer Environment to allow capturing and using variables from outer scopes
-/// The "lowest" Env should always be an Env::core, otherwise builtin `Funcs` will not work
+/// The "lowest" Env should always be an `Env::core`, otherwise builtin `Funcs` will not work
 #[derive(Clone, Default, Debug)]
 pub struct Env(Rc<Inner>);
 
@@ -40,7 +41,7 @@ impl Inner {
 }
 
 impl Env {
-    /// Creates a new "Base" Env containing natively implemented core `Funcs``
+    /// Creates a new "Base" Env containing natively implemented core `Funcs`
     #[must_use]
     pub(crate) fn core() -> Env {
         Env(Rc::new(Inner {

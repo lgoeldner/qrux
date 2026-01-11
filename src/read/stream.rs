@@ -29,7 +29,7 @@ impl TokenStream<'_> {
         self.tokens.get(self.pos.checked_sub(2)?).copied()
     }
 
-    pub fn is_eof(&self) -> bool {
+    pub const fn is_eof(&self) -> bool {
         self.pos >= self.tokens.len()
     }
 
@@ -37,7 +37,7 @@ impl TokenStream<'_> {
         Backup(self.pos)
     }
 
-    pub fn restore(&mut self, backup: Backup) {
+    pub const fn restore(&mut self, backup: Backup) {
         self.pos = backup.0;
     }
 
@@ -45,7 +45,7 @@ impl TokenStream<'_> {
         self.tokens.get(self.pos).copied()
     }
 
-    pub fn back(&mut self) {
+    pub const fn back(&mut self) {
         self.pos -= 1;
     }
 
@@ -53,7 +53,7 @@ impl TokenStream<'_> {
         self.pos
     }
 
-    pub fn skip(&mut self, n: usize) {
+    pub const fn skip(&mut self, n: usize) {
         self.pos += n;
     }
 }
