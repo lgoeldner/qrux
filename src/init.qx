@@ -1,7 +1,7 @@
 (do
 
 (defmacro! export-all! ()
-	`(export! (reflect:defsym)))
+	`(export! (defsym)))
 
 (defmacro! defun! (ident args body)
 	`(val! ,ident (fn* ,args ,body)))
@@ -165,7 +165,7 @@
 				(into acc (f (car r)))))))
 
 (defun! loadf-exported (path)
-	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (reflect:defsym)))"))))
+	(eval (read-string (str "(do " (slurp path) "(*ENV*)" " (export! (defsym)))"))))
 
 (defmacro! list:iter (ident in &rest)
 	   `(map (fn* (,ident) (do ~rest)) ,in))

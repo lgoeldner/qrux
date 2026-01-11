@@ -393,9 +393,14 @@ fn builtins() -> FxHashMap<EcoString, Expr> {
             },
             "recur", [] args @ .. => Err(QxErr::Recur(args))?,
             // get all defined symbols
-            "reflect:defsym", [], env:env => {
+            "defsym", [], env:env => {
                 let y = env.vals().borrow();
-                y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::List)
+                let mut vals: Vec<_> = y.keys().cloned().collect();
+                vals.sort();
+                vals.into_iter()
+                    .map(Expr::Sym)
+                    .collect::<Cons>()
+                    .pipe(Expr::List)
             },
 
             // use partialcmp to be able to order strings
