@@ -1,9 +1,0 @@
-(val! a 10)
-
-(prn "bef")
-
-(defmacro! not (_) true)
-
-(prn "after")
-
-(export! '(a not))

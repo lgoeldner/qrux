@@ -1,0 +1,59 @@
+;;
+;; solution for https://adventofcode.com/2025/day/1 PART 1
+;;
+;; puzzle summary: (AI)
+;; You have a circular dial numbered 0 to 99 that starts at 50.
+;; Each line of input tells you to rotate the dial left or right by a certain number of steps, wrapping around at 0 and 99.
+;; After applying each rotation, you check whether the dial is pointing at 0.
+;; The final answer is how many times the dial ends up exactly at 0 during the entire sequence of rotations.
+;;
+(do
+(val! result 
+    (->
+        ; read the input from file
+        ; the file contains the demo data from the problem statement online. replace with your own data if you like
+        (slurp "demo/aoc_input.txt")
+        ; split by newlines
+        (str:splitby "\n")
+        ; map each line to ("L"|"R" amount)
+        (map :f (fn* (it)
+            ; split the string into the first letter
+            (let* (
+                dir (str:at it 0)
+                ; and convert the remaining part to an int
+                amount (int (str:substr it :from 1)))
+                ;return as pair
+                (list dir amount))))
+
+        (fold
+            ; fold goes over each item with a carried over accumulator (init)
+            ; it gets returned at the end
+            ; here, accumulator is (current_position zero_count)
+            ; initial position is 50, zero count is 0
+            :init '(50 0)
+            :f (fn* (acc action) 
+                ; destructure for readability
+                (let* (
+                    pos (car acc)
+                    ; cadr = (car (cdr acc))
+                    ; the second item in acc
+                    zero_count (cadr acc)
+                    ; the direction corresponds to wether we use + or - for rotating the dial
+                    ; since functions are objects, we can do this:
+                    dir (if (= (car action) "R") + -)
+                    amount (cadr action)
+                    ; this uses the function we just stored in dir
+                    ; mod makes the dial wrap around like it is supposed to
+                    new_pos (mod (dir pos amount) 100)
+                    ; the zero count gets incremented when new_pos is zero.
+                    new_zero_count (if (= new_pos 0) (+ zero_count 1) zero_count))
+
+                    ; the value for the next iteration or for returning
+                    (list new_pos new_zero_count))))
+        ; this returns the accumulator of form (current_position zero_count)
+        ; so we want the zero_count part
+        cadr))
+
+(println (str "The Result is: " result ", it was supposed to be: 3!" (if (= result 3) "👍☑️🚀" " Something went wrong!")))
+result
+)

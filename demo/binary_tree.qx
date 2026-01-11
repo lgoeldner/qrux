@@ -1,0 +1,74 @@
+;; A binary tree of strings or ints.
+;; to mix types, the interpreter needs to be changed. key is partial_ord for Expr and the cmp builtin function
+
+; Structure: a node is always (element child_right child_right)
+; an empty node is nil
+; the left_child is smaller than or equal to element while the child_right is greater
+(defun! bin_tree (el l r) (list el l r))
+; getters
+(defun! get_el (bin_tree) (car bin_tree))
+(defun! get_left_child (bin_tree) (nth 1 bin_tree))
+(defun! get_right_child (bin_tree) (nth 2 bin_tree))
+
+
+(defun! add (to el)
+    ; if to is nil,
+    (if (= nil to)
+        ; create a new root node with no children
+        (bin_tree el nil nil)
+        ; otherwise, 
+        ; destructure the root into its parts.
+        ; let* is sequential, root_el is defined when evaluating cmp_res. syntax differs from normal let macro
+        (let*   (root_el (get_el to)
+                ; car takes the first element of a list. cdr is the list without the first element.
+                child_left (get_left_child to)
+                ; skip skips n elements in a list, this here accesses the third element in a list
+                child_right (get_right_child to)
+                ; compare if the new element `el` is greater or lesser than the root element
+                cmp_res (cmp el root_el))
+            ; using the cond macro.
+            (cond
+                ; less than => add on the left
+                ((<= cmp_res 0) (bin_tree root_el (add child_left el) child_right))
+                ; greater than => add on the right
+                ((> cmp_res 0) (bin_tree root_el child_left (add child_right el)))))))
+
+
+(defun! contains (haystack needle) 
+    (if (= nil haystack)
+        false
+        (if (= (get_el haystack) needle)
+            true
+            ; search the children
+            ; search left child if needle <= haystack
+            (if (<= (cmp needle (get_el haystack)) 0)
+                (contains (get_left_child haystack) needle)
+                ; else: search right child
+                (contains (get_right_child haystack) needle) ))))
+
+
+; threading macro inserts the previous result as the first argument to the next function call
+; this builds a big binary tree
+(val! my_tree 
+    (-> (bin_tree "meat" nil nil)
+        (add "fear")
+        (add "gear")
+        (add "ear")
+        (add "near")
+        (add "pear")
+        (add "rear")))
+
+; print the tree
+(println (str "my tree: " my_tree))
+; check if it contains "ear" and print the result
+(println (str "contains ear? => " (contains my_tree "ear")))
+
+(export! '(
+    bin_tree
+    add
+    contains
+    get_el
+    get_right_child
+    get_left_child))
+
+my_tree

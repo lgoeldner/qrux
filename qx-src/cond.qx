@@ -1,9 +1,0 @@
-(defmacro! cond= (eq-to &rest) 
-  (let* 
-    (c (car rest)
-     r (cdr rest)
-     
-     )
-    ))
-
-(export! '(cond=))

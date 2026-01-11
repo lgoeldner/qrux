@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use ecow::EcoString;
+use std::cmp::Ordering;
 use std::rc::Rc;
 use tap::{Pipe, Tap};
 
@@ -85,16 +86,6 @@ macro_rules! funcmatch {
 				),*
             }
 
-			// match $it {
-			// 	$(
-			// 		$name => func! {
-			// 			$(env: $env,)? $(ctx: $ctx,)? $name; [$($arg),*] $($rest @ ..)? => $exp
-			// 		},
-			// 	)*
-
-			// 	_ => None::<Expr>?,
-			// }
-			// .into()
 	};
 }
 
@@ -131,6 +122,8 @@ fn int_ops() -> FxHashMap<EcoString, Expr> {
         "/" => Func::new_expr("/", |args, _, _| int_op(i64::checked_div, args)),
         "rem" => Func::new_expr("rem", |args, _, _| int_op(i64::checked_rem, args)),
 
+        // modulo has different results for negative values
+        "mod" => func! { "mod";  [lhs, rhs] => Expr::Int(lhs.to_int()?.rem_euclid(rhs.to_int()?)) },
         ">" => func! { ">";  [lhs, rhs] => Expr::Bool(lhs.to_int()? > rhs.to_int()?) },
         "<" => func! { "<";  [lhs, rhs] => Expr::Bool(lhs.to_int()? < rhs.to_int()?) },
         ">=" => func! {">="; [lhs, rhs] => Expr::Bool(lhs.to_int()? >= rhs.to_int()?) },
@@ -403,6 +396,21 @@ fn builtins() -> FxHashMap<EcoString, Expr> {
             "reflect:defsym", [], env:env => {
                 let y = env.vals().borrow();
                 y.keys().cloned().map(Expr::Sym).collect::<Cons>().pipe(Expr::List)
+            },
+
+            // use partialcmp to be able to order strings
+            "cmp", [a, b] => {
+                match a.partial_cmp(&b) {
+                    None => {
+                        Err(anyhow!("cannot compare {} to {}", a.get_type(), b.get_type()))?
+                    },
+                    Some(ord) =>
+                        Expr::Int(match ord {
+                            Ordering::Equal => 0,
+                            Ordering::Less => -1,
+                            Ordering::Greater => 1
+                        }),
+                }
             },
         }
     }

@@ -1,14 +1,14 @@
-//! Directly starts a REPL. 
+//! Directly starts a REPL.
 //! Specify a file as the first argument to run it, and open a REPL.
 //! Use (bye) to exit
 use colored::Colorize;
-use qrux::{print::pp_ast, read::QxErr, Runtime, Term};
+use qrux::{print::pp_ast, read::QxErr, Runtime};
 
 fn main() -> Result<(), ()> {
     // presave red Exception label
     let exception = "Exception".red().on_black();
-    
-    // create a new runtime. for the first argument, 
+
+    // create a new runtime. for the first argument,
     let mut runtime = match Runtime::new() {
         // all good
         (r, Ok(_)) => r,

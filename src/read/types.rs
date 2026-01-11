@@ -2,7 +2,7 @@ use crate::{env::Env, Func};
 use ecow::EcoString;
 use im::HashMap;
 use kw::Keyword;
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, cmp, rc::Rc};
 use thiserror::Error;
 
 pub type QxResult<T> = Result<T, QxErr>;
@@ -65,6 +65,16 @@ pub enum ExprType {
     Map,
 }
 
+impl cmp::PartialOrd for Expr {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        match (self, other) {
+            (Expr::String(s), Expr::String(so)) => Some(s.cmp(so)),
+
+            _ => Some(self.to_int().ok()?.cmp(&other.to_int().ok()?)),
+        }
+    }
+}
+
 // Display is Debug
 impl std::fmt::Display for ExprType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -74,7 +84,7 @@ impl std::fmt::Display for ExprType {
 
 use colored::Colorize;
 /// The Error Type. Can be displayed nicely for the user. uses thiserror
-/// Unified error type for reader, evaluator, and runtime
+/// Unified error type for reader, evaluator, and runtime.
 /// Designed for user friendly display and structured handling
 #[derive(Error, Debug)]
 pub enum QxErr {
@@ -398,7 +408,7 @@ impl Input {
     }
 
     #[must_use]
-    pub fn tokenize(&self) -> super::stream::TokenStream {
+    pub fn tokenize(&self) -> super::stream::TokenStream<'_> {
         super::tokenize(&self.0)
     }
 }

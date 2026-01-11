@@ -1,7 +1,7 @@
 use crate::{
     env::Env,
     expr,
-    read::{cons, types::closure::Closure, Cons, ConsIter, Expr, QxErr, QxResult},
+    read::{cons, types::closure::Closure, Cons, ConsIter, Expr, ExprType, QxErr, QxResult},
     special_form, Func, Runtime,
 };
 
@@ -141,7 +141,7 @@ impl Runtime {
         };
 
         match opcode {
-            // SpecialForm::Loop => self.eval_loop(xs, env),
+            SpecialForm::Loop => self.eval_loop(xs, env),
             SpecialForm::Val => special_form! {
                 args, "(val! <sym> <expr>)";
                 [pat, expr] => {
@@ -354,6 +354,40 @@ impl Runtime {
         break_ok!(Expr::Closure(Rc::new(early_ret!(cl))))
     }
 
+    fn eval_loop(&mut self, args: Cons, env: Option<Env>) -> ControlFlow {
+        let env = Env::new(env.unwrap_or_else(|| self.env.clone()));
+
+        let vars = early_ret!(args
+            .car()
+            .ok_or_else(|| QxErr::NoArgs(Some(args.clone()), "loop"))
+            .and_then(|it| it.to_list()));
+
+        let mut names = vec![];
+
+        for [name, arg] in vars.pair_iter() {
+            let name = early_ret!(name.as_strt(ExprType::Sym));
+
+            names.push(name.clone());
+
+            self.defenv(&name, &arg, Some(env.clone()), Shadow::Yes)
+                .unwrap();
+        }
+
+        let body = args.cdr().car().unwrap();
+
+        loop {
+            match self.eval(body.clone(), Some(env.clone())) {
+                Err(QxErr::Recur(new)) => {
+                    for (arg, name) in new.into_iter().zip(&names) {
+                        env.set(name.clone(), arg, Shadow::Yes).unwrap();
+                    }
+                }
+
+                res => return ControlFlow::Break(res),
+            }
+        }
+    }
+
     /// Apply a Func or Closure
     fn apply_func(&mut self, ast: Expr, env: Option<Env>) -> ControlFlow {
         // prepare the list for the function call by evaluating the elements in it
@@ -523,6 +557,7 @@ mod special_form_code {
     use tap::Pipe;
 
     pub enum SpecialForm {
+        Loop,
         Def,
         Val,
         Del,
@@ -543,6 +578,7 @@ mod special_form_code {
 
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             match s {
+                "loop" => Self::Loop,
                 "val!" => Self::Val,
                 "del!" => Self::Del,
                 "defmacro!" => Self::Defmacro,

@@ -7,6 +7,13 @@
 - in REPL: use up-arrow for history and enter to run
 - in File: use (export! sym1 sym2 ...) to move local values to the global environment that carries over into the REPL
 
+# Demos
+Demos are available in demos/
+There is binary_tree.qx, which implements a basic binary tree with immutable insertion and checking wether the tree contains a value.
+aoc2025-01.qx contains the solution to advent of code 2025 day 1.
+run them with `cargo run binary_tree.qx/aoc2025-01.qx`.
+binary_tree exports some functions that can be used in the REPL afterwards
+
 # Basics
 basic math: +, -, /, *
 define a global variable with (val! ident val)
@@ -36,7 +43,7 @@ Example:
   ; long form
   ((fn* (a b) (+ a b)) 1 2) => 3
 ```
-Some basic functions:
+Some basic functionality:
 - (map f over): returns a new list with the result of applying f to each element in over
 - (rev list): reverse a list
 - (println (str "a" "b")): println prints, str concatenates all arguments to one string
@@ -45,6 +52,22 @@ Some basic functions:
 - the threading macro (-> start_val expr1 expr2 ...)
   inserts the start_val as a first argument into the function calls expr1
   example:
+- quasiquoting and quoting is a way to make a lisp expression not be treated as a function call but as data
+  quasiquoting means, you get to splice together things that will be evaluated at runtime and things that wont be
+  example: 
+  ```clojure
+  (val! a 100)
+
+  ; quoting
+  '(1 2 3)      => (1 2 3)
+
+  ; quasiquoting
+  `(,a 200 300) => (100 200 300)
+  
+  ; splicing
+  (val! l '(1 2 3))
+  `(~l 4 5 6) => (1 2 3 4 5 6)
+```
 
 ```lisp
   (-> 50
